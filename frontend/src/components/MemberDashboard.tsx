@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { API_BASE_URL } from '../config';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -34,7 +35,7 @@ export const MemberDashboard: React.FC<{ userEmail: string }> = ({ userEmail: _u
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:8000/api/members/me/', {
+        const response = await fetch(`${API_BASE_URL}/members/me/`, {
           headers: {
             'Authorization': `Token ${localStorage.getItem('user_token')}`
           }
@@ -153,6 +154,15 @@ export const MemberDashboard: React.FC<{ userEmail: string }> = ({ userEmail: _u
               <p><strong>Joined:</strong> {new Date(profile?.joined_date || '').toLocaleDateString()}</p>
               <p><strong>Bio:</strong> {profile?.bio || 'No bio added'}</p>
             </div>
+
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+              <h3 style={{ marginBottom: '0.75rem', color: '#003d7a' }}>Your Next Steps This Week</h3>
+              <ul style={{ margin: 0, paddingLeft: '1rem', color: '#475569' }}>
+                <li>Register for an upcoming church event.</li>
+                <li>Join one Bible study discussion in the forums.</li>
+                <li>Share one prayer or testimony with the community.</li>
+              </ul>
+            </div>
           </div>
         )}
 
@@ -166,6 +176,23 @@ export const MemberDashboard: React.FC<{ userEmail: string }> = ({ userEmail: _u
             <h2>Giving History</h2>
             <p style={{ marginTop: '1rem', color: '#666' }}>Total Tithe: UGX {profile?.total_tithe || 0}</p>
             <p style={{ marginTop: '0.5rem', color: '#666' }}>View detailed giving history in your account settings</p>
+          </div>
+        )}
+
+        {activeTab === 'activity' && (
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            <h2>Activity Summary</h2>
+            <p style={{ marginTop: '1rem', color: '#475569' }}>Your engagement this month:</p>
+            <ul style={{ marginTop: '0.75rem', paddingLeft: '1rem', color: '#475569' }}>
+              <li>Events attended: {profile?.attendance_count || 0}</li>
+              <li>Prayer requests shared: {dashboard.prayer_requests}</li>
+              <li>Giving actions recorded: {dashboard.donations_total > 0 ? 1 : 0}</li>
+            </ul>
           </div>
         )}
 

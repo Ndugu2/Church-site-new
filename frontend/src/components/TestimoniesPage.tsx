@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Heart } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -29,7 +30,7 @@ export const TestimoniesPage: React.FC = () => {
   useEffect(() => {
     const fetchTestimonies = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:8000/api/testimonies/');
+        const response = await fetch(`${API_BASE_URL}/testimonies/`);
         const data = await response.json();
         setTestimonies(data.results || data);
       } catch (error) {
@@ -59,6 +60,11 @@ export const TestimoniesPage: React.FC = () => {
 
         {loading ? (
           <p style={{ textAlign: 'center' }}>Loading testimonies...</p>
+        ) : testimonies.length === 0 ? (
+          <div style={{ textAlign: 'center', background: 'white', padding: '2rem', borderRadius: '10px', color: '#475569' }}>
+            <p style={{ marginBottom: '0.5rem', fontWeight: 600 }}>No testimonies have been published yet.</p>
+            <p style={{ margin: 0 }}>Check back soon as members share their stories of faith.</p>
+          </div>
         ) : (
           <>
             {/* Featured Testimonies */}

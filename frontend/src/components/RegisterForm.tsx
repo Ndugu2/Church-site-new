@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
+import { API_BASE_URL } from '../config';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -37,7 +38,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
 
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/register/', {
+      const response = await fetch(`${API_BASE_URL}/register/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -10,6 +10,7 @@ from .views import (
     LessonVideoViewSet,
     LoginView,
     RegisterView,
+    AdminSessionView,
     MemberProfileViewSet,
     BlogPostViewSet,
     TestimonyViewSet,
@@ -17,6 +18,7 @@ from .views import (
     ForumThreadViewSet,
     ForumPostViewSet,
     StaffMemberViewSet,
+    AdminAuditLogViewSet,
     NotificationViewSet,
     PaymentViewSet,
     AnalyticsViewSet,
@@ -40,6 +42,7 @@ router.register(r'forum-categories', ForumCategoryViewSet)
 router.register(r'forum-threads', ForumThreadViewSet)
 router.register(r'forum-posts', ForumPostViewSet)
 router.register(r'staff', StaffMemberViewSet)
+router.register(r'admin-audit-logs', AdminAuditLogViewSet, basename='admin-audit-logs')
 router.register(r'notifications', NotificationViewSet, basename='notifications')
 router.register(r'payments', PaymentViewSet, basename='payments')
 router.register(r'analytics', AnalyticsViewSet, basename='analytics')
@@ -50,6 +53,7 @@ router.register(r'sabbath-programmes', SabbathProgrammeViewSet, basename='sabbat
 urlpatterns = [
     path('login/', LoginView.as_view(), name='api-login'),
     path('register/', RegisterView.as_view(), name='api-register'),
+    path('admin/session/', AdminSessionView.as_view(), name='api-admin-session'),
     path('', include(router.urls)),
 ]
 

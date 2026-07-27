@@ -1,6 +1,8 @@
 ﻿import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, MessageCircle, Search, Plus, ChevronLeft, Pin, Flame, Eye, ThumbsUp, Tag, X, Send, BookOpen, Heart, Users, Bell, Star, Hash } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { API_BASE_URL } from '../config';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -77,6 +79,8 @@ export const ForumsPage: React.FC = () => {
   const [categories, setCategories] = useState(FALLBACK_CATEGORIES);
   const [selectedCat, setSelectedCat] = useState<typeof FALLBACK_CATEGORIES[0] | null>(null);
   const [selectedThread, setSelectedThread] = useState<any | null>(null);
+  const [categoryThreads, setCategoryThreads] = useState<Record<number, any[]>>({});
+  const [threadsLoading, setThreadsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'latest' | 'hot' | 'unanswered'>('latest');
   const [showNewThread, setShowNewThread] = useState(false);
@@ -84,14 +88,151 @@ export const ForumsPage: React.FC = () => {
   const [replyText, setReplyText] = useState('');
   const [liked, setLiked] = useState<Record<number, boolean>>({});
 
+  const getToken = () => localStorage.getItem('user_token');
+
+  const mapApiThreadToUi = (thread: any, fallbackColor = 'var(--primary)') => {
+    const totalLikes = Array.isArray(thread.posts)
+      ? thread.posts.reduce((sum: number, post: any) => sum + (post.likes || 0), 0)
+      : 0;
+
+    return {
+      id: thread.id,
+      title: thread.title,
+      author: thread.author_name || 'Member',
+      avatar: (thread.author_name || 'M').charAt(0).toUpperCase(),
+      time: thread.updated_at ? new Date(thread.updated_at).toLocaleDateString() : 'Recently',
+      replies: thread.post_count || 0,
+      views: Math.max((thread.post_count || 0) * 7, 1),
+      likes: totalLikes,
+      pinned: !!thread.pinned,
+      tags: [thread.closed ? 'Closed' : 'Discussion'],
+      preview: thread.content || '',
+      body: thread.content || '',
+      color: fallbackColor,
+    };
+  };
+
+  const fetchThreadsForCategory = async (categoryId: number, fallbackColor = 'var(--primary)') => {
+    setThreadsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/forum-threads/by_category/?category_id=${categoryId}`);
+      const data = await response.json();
+      const list = (data.results || data || []).map((thread: any) => mapApiThreadToUi(thread, fallbackColor));
+      setCategoryThreads(prev => ({ ...prev, [categoryId]: list }));
+    } catch {
+      // Keep fallback thread content when backend is unavailable.
+    } finally {
+      setThreadsLoading(false);
+    }
+  };
+
+  const handleCreateThread = async () => {
+    if (!selectedCat) return;
+    if (!newThread.title.trim() || !newThread.body.trim()) return;
+
+    const token = getToken();
+    if (!token) {
+      toast.error('Please log in first to create a discussion.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/forum-threads/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${token}`,
+        },
+        body: JSON.stringify({
+          category: selectedCat.id,
+          title: newThread.title.trim(),
+          content: newThread.body.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.error || 'Unable to create discussion.');
+      }
+
+      await fetchThreadsForCategory(selectedCat.id, selectedCat.color || 'var(--primary)');
+      setShowNewThread(false);
+      setNewThread({ title: '', body: '', tag: '' });
+      toast.success('Discussion posted successfully.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create discussion.';
+      toast.error(message);
+    }
+  };
+
+  const handleReplySubmit = async () => {
+    if (!selectedThread || !replyText.trim()) return;
+
+    const token = getToken();
+    if (!token) {
+      toast.error('Please log in first to reply.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/forum-posts/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${token}`,
+        },
+        body: JSON.stringify({
+          thread: selectedThread.id,
+          content: replyText.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.error || 'Unable to post reply.');
+      }
+
+      setReplyText('');
+      if (selectedCat) {
+        await fetchThreadsForCategory(selectedCat.id, selectedCat.color || 'var(--primary)');
+      }
+      setSelectedThread((prev: any) => prev ? ({ ...prev, replies: (prev.replies || 0) + 1 }) : prev);
+      toast.success('Reply posted.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to post reply.';
+      toast.error(message);
+    }
+  };
+
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/forum-categories/')
+    fetch(`${API_BASE_URL}/forum-categories/`)
       .then(r => r.json())
-      .then(d => { if ((d.results || d).length > 0) setCategories(d.results || d); })
+      .then(d => {
+        const list = d.results || d;
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((cat: any, idx: number) => ({
+            ...cat,
+            color: FALLBACK_CATEGORIES[idx % FALLBACK_CATEGORIES.length].color,
+            icon: FALLBACK_CATEGORIES[idx % FALLBACK_CATEGORIES.length].icon,
+            tag: cat.tag || FALLBACK_CATEGORIES[idx % FALLBACK_CATEGORIES.length].tag,
+          }));
+          setCategories(mapped);
+        }
+      })
       .catch(() => {});
   }, []);
 
-  const threads = selectedCat ? (FALLBACK_THREADS[selectedCat.id] || []) : [];
+  useEffect(() => {
+    if (view === 'threads' && selectedCat) {
+      fetchThreadsForCategory(selectedCat.id, selectedCat.color || 'var(--primary)');
+    }
+  }, [view, selectedCat]);
+
+  const threads = selectedCat
+    ? ((categoryThreads[selectedCat.id] && categoryThreads[selectedCat.id].length > 0)
+      ? categoryThreads[selectedCat.id]
+      : (FALLBACK_THREADS[selectedCat.id] || []))
+    : [];
   const filteredThreads = threads.filter(t =>
     t.title.toLowerCase().includes(search.toLowerCase()) ||
     t.preview.toLowerCase().includes(search.toLowerCase())
@@ -263,7 +404,11 @@ export const ForumsPage: React.FC = () => {
               )}
 
               {/* Regular threads */}
-              {regular.length === 0 ? (
+              {threadsLoading ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#888' }}>
+                  Loading discussions...
+                </div>
+              ) : regular.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem', color: '#888' }}>
                   <MessageCircle size={48} style={{ opacity: 0.2, margin: '0 auto 1rem', display: 'block' }} />
                   <p>No discussions found. Be the first to start one!</p>
@@ -303,7 +448,7 @@ export const ForumsPage: React.FC = () => {
                       <p style={{ color: '#aaa', margin: 0, fontSize: '0.8rem' }}>{selectedThread.time}</p>
                     </div>
                   </div>
-                  <p style={{ color: '#444', lineHeight: '1.8', fontSize: '0.97rem' }}>{selectedThread.preview} Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation. This represents the full body of the discussion post that would be stored in the database.</p>
+                  <p style={{ color: '#444', lineHeight: '1.8', fontSize: '0.97rem' }}>{selectedThread.body || selectedThread.preview}</p>
                   <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #f0f0f0' }}>
                     <button onClick={() => setLiked({ ...liked, [selectedThread.id]: !liked[selectedThread.id] })}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1.5px solid', padding: '0.5rem 1rem', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem', transition: 'all 0.2s',
@@ -328,7 +473,7 @@ export const ForumsPage: React.FC = () => {
                 <textarea rows={4} placeholder="Share your thoughts, encouragement, or Scripture..." value={replyText} onChange={e => setReplyText(e.target.value)}
                   style={{ width: '100%', padding: '0.85rem 1rem', border: '1.5px solid #e5e7eb', borderRadius: '12px', fontSize: '0.92rem', resize: 'vertical', boxSizing: 'border-box', outline: 'none' }} />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
-                  <button onClick={() => { if (replyText.trim()) { setReplyText(''); } }} className="btn-accent"
+                  <button onClick={handleReplySubmit} className="btn-accent"
                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.5rem', fontSize: '0.9rem' }}>
                     <Send size={16} /> Post Reply
                   </button>
@@ -368,7 +513,7 @@ export const ForumsPage: React.FC = () => {
                   <textarea rows={5} placeholder="Write your full message here..." value={newThread.body} onChange={e => setNewThread({...newThread, body: e.target.value})}
                     style={{ width: '100%', padding: '0.75rem 1rem', border: '1.5px solid #e5e7eb', borderRadius: '10px', fontSize: '0.92rem', resize: 'vertical', boxSizing: 'border-box', outline: 'none' }} />
                 </div>
-                <button className="btn-accent" onClick={() => { if (newThread.title && newThread.body) setShowNewThread(false); }}
+                <button className="btn-accent" onClick={handleCreateThread}
                   style={{ padding: '0.9rem', fontWeight: '700', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                   <Send size={16} /> Post Discussion
                 </button>

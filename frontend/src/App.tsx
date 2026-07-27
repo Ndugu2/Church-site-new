@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { Toaster, toast } from 'react-hot-toast';
-import { Users, GraduationCap, Music, Map as MapIcon, Heart, HandHelping, LogOut, User, BookOpen, Calendar, MessageSquare, Award } from 'lucide-react';
+import { Users, GraduationCap, Music, Map as MapIcon, Heart, HandHelping, LogOut, User, BookOpen, Calendar, MessageSquare, Award, Search, X, ChevronDown } from 'lucide-react';
+import { API_BASE_URL } from './config';
 
 // Import new components
 import { LoginForm } from './components/LoginForm';
 import { RegisterForm } from './components/RegisterForm';
 import { BlogPage } from './components/BlogPage';
-import { TestimoniesPage } from './components/TestimoniesPage';
 import { StaffDirectory } from './components/StaffDirectory';
 import { MemberDashboard } from './components/MemberDashboard';
 import { ForumsPage } from './components/ForumsPage';
@@ -64,7 +64,7 @@ const pageTransition: Variants = {
 };
 
 // API root definition
-const API_URL = 'http://127.0.0.1:8000/api';
+const API_URL = API_BASE_URL;
 
 // --- Types ---
 interface Sermon {
@@ -99,6 +99,20 @@ interface PrayerRequest {
   name: string;
   content: string;
   confidential: boolean;
+  follow_up_status?: 'received' | 'assigned' | 'contacted' | 'ongoing' | 'completed';
+  care_request_type?: 'none' | 'pastoral_call' | 'elder_visit' | 'counseling' | 'prayer_partner';
+  follow_up_notes?: string;
+}
+
+interface TestimonyItem {
+  id: number;
+  title: string;
+  content: string;
+  author_name?: string;
+  created_at: string;
+  testimony_type?: 'prayer_answered' | 'spiritual_growth' | 'community_support' | 'healing_restoration' | 'outreach_impact';
+  next_step?: 'none' | 'mentor' | 'growth_class' | 'prayer_team' | 'service_team';
+  is_featured?: boolean;
 }
 
 interface Donation {
@@ -186,6 +200,19 @@ interface ActivityLog {
   msg: string;
 }
 
+interface AdminAuditEntry {
+  id: number;
+  action: 'create' | 'update' | 'delete';
+  resource_type: string;
+  resource_id: string;
+  resource_label: string;
+  actor_username?: string;
+  created_at: string;
+  details: Record<string, any>;
+}
+
+type AdminAuditActionFilter = 'all' | 'create' | 'update' | 'delete';
+
 interface Announcement {
   id: number;
   title: string;
@@ -195,6 +222,11 @@ interface Announcement {
   icon: string;
   slug?: string;
   is_published?: boolean;
+}
+
+interface EventRegistrationReceipt {
+  eventTitle: string;
+  reference: string;
 }
 
 type SabbathProgrammeForm = {
@@ -423,10 +455,76 @@ const DEFAULT_BELIEFS = [
 ];
 
 const DEFAULT_PRAYERS: PrayerRequest[] = [
-  { id: 1, name: "Grace Kemigisha", content: "Praying for guidance and peace as I prepare for my final exams at Bugema University this semester.", confidential: false },
-  { id: 2, name: "Anonymous", content: "Please pray for my mother's quick recovery from a severe malaria infection.", confidential: false },
-  { id: 3, name: "Elder Samuel", content: "Let's pray for the upcoming campus camp meeting outreach program to touch many young souls.", confidential: false }
+  {
+    id: 1,
+    name: "Grace Kemigisha",
+    content: "Praying for guidance and peace as I prepare for my final exams at Bugema University this semester.",
+    confidential: false,
+    follow_up_status: 'assigned',
+    care_request_type: 'prayer_partner',
+    follow_up_notes: 'Prayer partner assigned for weekly check-ins.'
+  },
+  {
+    id: 2,
+    name: "Anonymous",
+    content: "Please pray for my mother's quick recovery from a severe malaria infection.",
+    confidential: false,
+    follow_up_status: 'ongoing',
+    care_request_type: 'pastoral_call',
+    follow_up_notes: 'Pastoral call completed. Continuing prayer support.'
+  },
+  {
+    id: 3,
+    name: "Elder Samuel",
+    content: "Let's pray for the upcoming campus camp meeting outreach program to touch many young souls.",
+    confidential: false,
+    follow_up_status: 'received',
+    care_request_type: 'none',
+    follow_up_notes: ''
+  }
 ];
+
+const CORE_MISSION_STATEMENT = 'We stand together in prayer, strengthen one another in love, and grow continually in the knowledge of God as one family in Christ.';
+
+const DISCIPLESHIP_PATH = [
+  { id: 'pray', title: 'Pray Together', desc: 'Share a request and stand with others in intercession.', route: 'prayer-requests' },
+  { id: 'connect', title: 'Connect in Community', desc: 'Build one another through fellowship and care ministries.', route: 'forums' },
+  { id: 'grow', title: 'Grow in Knowledge', desc: 'Join Bible study and engage sermons with purpose.', route: 'bible-study' },
+  { id: 'serve', title: 'Serve on Mission', desc: 'Turn faith into action through outreach and ministry service.', route: 'community-outreach' },
+  { id: 'mentor', title: 'Mentor Others', desc: 'Share testimony and disciple the next believer.', route: 'testimonies' },
+];
+
+const CARE_REQUEST_LABELS: Record<string, string> = {
+  none: 'No additional care needed',
+  pastoral_call: 'Pastoral call',
+  elder_visit: 'Elder visit',
+  counseling: 'Counseling support',
+  prayer_partner: 'Prayer partner',
+};
+
+const FOLLOW_UP_STATUS_LABELS: Record<string, string> = {
+  received: 'Received',
+  assigned: 'Assigned',
+  contacted: 'Contacted',
+  ongoing: 'Ongoing Support',
+  completed: 'Completed',
+};
+
+const TESTIMONY_TYPE_LABELS: Record<string, string> = {
+  prayer_answered: 'Prayer Answered',
+  spiritual_growth: 'Spiritual Growth',
+  community_support: 'Community Support',
+  healing_restoration: 'Healing & Restoration',
+  outreach_impact: 'Outreach Impact',
+};
+
+const TESTIMONY_NEXT_STEP_LABELS: Record<string, string> = {
+  none: 'No follow-up needed',
+  mentor: 'Connect to Mentor',
+  growth_class: 'Invite to Growth Class',
+  prayer_team: 'Connect to Prayer Team',
+  service_team: 'Connect to Service Team',
+};
 
 const LESSON_VIDEOS = [
   { week: 1, title: "Week 1: The Foundation of God's Kingdom", date: "2026-07-04", youtubeId: "dQw4w9WgXcQ", desc: "Understanding the eternal covenant and how the sanctuary services reflect the character of God." },
@@ -439,6 +537,8 @@ export default function App() {
   const [currentRoute, setCurrentRoute] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [mobileMenuSearch, setMobileMenuSearch] = useState('');
+  const [mobileMenuSectionOpen, setMobileMenuSectionOpen] = useState<string>('home-about');
 
   // Authentication States
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('user_token'));
@@ -453,6 +553,7 @@ export default function App() {
   const [prayers, setPrayers] = useState<PrayerRequest[]>(DEFAULT_PRAYERS);
   const [bibleStudies, setBibleStudies] = useState<BibleStudy[]>([]);
   const [donations, setDonations] = useState<Donation[]>([]);
+  const [testimonies, setTestimonies] = useState<TestimonyItem[]>([]);
   const [projects, setProjects] = useState<ChurchProject[]>(DEFAULT_PROJECTS);
   const [selectedProjectFund, setSelectedProjectFund] = useState('Building Fund');
   const [logs, setLogs] = useState<ActivityLog[]>([{ time: new Date().toLocaleTimeString(), msg: "App loaded." }]);
@@ -460,9 +561,12 @@ export default function App() {
   // Interactive View States
   const [dailyVerse, setDailyVerse] = useState(BIBLE_VERSES[0]);
   const [selectedSermonCat, setSelectedSermonCat] = useState('all');
+  const [sermonSearchTerm, setSermonSearchTerm] = useState('');
+  const [sermonPage, setSermonPage] = useState(1);
   const [selectedGalleryAlbum, setSelectedGalleryAlbum] = useState('all');
   const [gallery, setGallery] = useState<GalleryImage[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryCloudAvailable, setGalleryCloudAvailable] = useState(isSupabaseConfigured);
   const [galleryUploadForm, setGalleryUploadForm] = useState({ title: '', album: 'Sabbath Worship' });
   const [galleryUploadFile, setGalleryUploadFile] = useState<File | null>(null);
   const [galleryUploading, setGalleryUploading] = useState(false);
@@ -505,6 +609,18 @@ export default function App() {
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
 
+  const weekKey = getWeekKey();
+  const [weeklyPromptDismissed, setWeeklyPromptDismissed] = useState<boolean>(() =>
+    localStorage.getItem('sic_weekly_prompt_' + getWeekKey()) === 'dismissed'
+  );
+  const [weeklyEssentialsProgress, setWeeklyEssentialsProgress] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('sic_weekly_essentials_' + getWeekKey()) || '{}');
+    } catch {
+      return {};
+    }
+  });
+
   const CHECKLIST_ITEMS = [
     { id: 'sabbath', label: 'Attended Sabbath School', icon: '📖' },
     { id: 'sermon', label: 'Listened to a Sermon', icon: '🎙️' },
@@ -517,6 +633,13 @@ export default function App() {
 
   const POLL_OPTIONS = ['Hebrews', 'Romans', 'Genesis', 'John'];
 
+  const WEEKLY_ESSENTIALS = [
+    { id: 'programme', label: 'Check this Sabbath programme', route: 'sabbath-programme', cta: 'Open Programme' },
+    { id: 'notices', label: 'Read weekly church notices', route: 'announcements', cta: 'Read Notices' },
+    { id: 'prayer', label: 'Submit or support a prayer request', route: 'prayer-requests', cta: 'Prayer Room' },
+    { id: 'sermon', label: 'Listen to this week\'s sermon', route: 'sermons', cta: 'Open Sermons' },
+  ];
+
   const QUIZ_QUESTIONS = [
     { q: 'What day is the Seventh-day Adventist Sabbath?', options: ['Friday','Saturday','Sunday','Monday'], answer: 'Saturday' },
     { q: 'Which chapter begins "For God so loved the world..."?', options: ['John 1','John 3','John 11','Romans 8'], answer: 'John 3' },
@@ -527,6 +650,18 @@ export default function App() {
     const updated = { ...checklist, [id]: !checklist[id] };
     setChecklist(updated);
     localStorage.setItem('sic_checklist_' + getWeekKey(), JSON.stringify(updated));
+  };
+
+  const completeWeeklyEssential = (id: string, route: string) => {
+    const updated = { ...weeklyEssentialsProgress, [id]: true };
+    setWeeklyEssentialsProgress(updated);
+    localStorage.setItem('sic_weekly_essentials_' + weekKey, JSON.stringify(updated));
+    setCurrentRoute(route);
+  };
+
+  const dismissWeeklyPrompt = () => {
+    setWeeklyPromptDismissed(true);
+    localStorage.setItem('sic_weekly_prompt_' + weekKey, 'dismissed');
   };
 
   const submitPollVote = (option: string) => {
@@ -578,10 +713,29 @@ export default function App() {
   const [addEventForm, setAddEventForm] = useState({ title: '', date: '', location: '', desc: '' });
   const [addSermonForm, setAddSermonForm] = useState({ title: '', speaker: '', date: '', passage: '', category: 'Sabbath Sermons' });
   const [studyForm, setStudyForm] = useState({ name: '', email: '', phone: '', country: '', course: '' });
-  const [prayerForm, setPrayerForm] = useState({ name: '', content: '', confidential: false });
+  const [prayerForm, setPrayerForm] = useState<{
+    name: string;
+    content: string;
+    confidential: boolean;
+    care_request_type: 'none' | 'pastoral_call' | 'elder_visit' | 'counseling' | 'prayer_partner';
+  }>({
+    name: '',
+    content: '',
+    confidential: false,
+    care_request_type: 'none',
+  });
+  const [testimonyForm, setTestimonyForm] = useState({
+    title: '',
+    content: '',
+    testimony_type: 'spiritual_growth',
+    next_step: 'none',
+    image: '',
+  });
   const [donationForm, setDonationForm] = useState({ amount: '', fund: 'Tithe', method: 'Mobile Money' });
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
   const [eventRegForm, setEventRegForm] = useState({ name: '', email: '', phone: '', notes: '' });
+  const [eventReceipt, setEventReceipt] = useState<EventRegistrationReceipt | null>(null);
+  const [donationReceipt, setDonationReceipt] = useState<{ reference: string; amount: number; fund: string } | null>(null);
   const [addProjectForm, setAddProjectForm] = useState({
     title: '',
     category: 'Construction',
@@ -605,6 +759,11 @@ export default function App() {
   const [projectHistoryById, setProjectHistoryById] = useState<Record<number, ProjectHistoryEntry[]>>({});
   const [openProjectHistoryId, setOpenProjectHistoryId] = useState<number | null>(null);
   const [projectHistoryFilter, setProjectHistoryFilter] = useState<ProjectHistoryActionFilter>('all');
+  const [adminAuditEntries, setAdminAuditEntries] = useState<AdminAuditEntry[]>([]);
+  const [adminAuditLoading, setAdminAuditLoading] = useState(false);
+  const [adminAuditError, setAdminAuditError] = useState('');
+  const [adminAuditActionFilter, setAdminAuditActionFilter] = useState<AdminAuditActionFilter>('all');
+  const [adminAuditResourceFilter, setAdminAuditResourceFilter] = useState('');
 
   // Alerts
   const [studySuccess] = useState(false);
@@ -632,6 +791,7 @@ export default function App() {
   // Admin Panel states
   const [activeAdminTab, setActiveAdminTab] = useState('admin-stats');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(localStorage.getItem('admin_authenticated') === 'true');
+  const [isAdminSessionChecking, setIsAdminSessionChecking] = useState(false);
   const [adminLoginForm, setAdminLoginForm] = useState({ username: '', password: '' });
   const [adminLoginError, setAdminLoginError] = useState('');
   const [adminLoginLoading, setAdminLoginLoading] = useState(false);
@@ -653,6 +813,18 @@ export default function App() {
     icon: '📣',
     is_published: true,
   });
+  const getRouteFromHash = (): string | null => {
+    const raw = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
+    if (!raw) return null;
+    return raw;
+  };
+
+  useEffect(() => {
+    const hashRoute = getRouteFromHash();
+    if (hashRoute === 'admin') {
+      setCurrentRoute('admin');
+    }
+  }, []);
 
   // --- API Sync on Load ---
   useEffect(() => {
@@ -661,6 +833,7 @@ export default function App() {
     fetchPrayers();
     fetchBibleStudies();
     fetchDonations();
+    fetchTestimonies();
     fetchProjects();
     fetchGallery();
     fetchLessonVideos();
@@ -676,12 +849,139 @@ export default function App() {
   }, [currentRoute, selectedProjectFund]);
 
   useEffect(() => {
+    setSermonPage(1);
+  }, [selectedSermonCat, sermonSearchTerm]);
+
+  useEffect(() => {
+    const titles: Record<string, string> = {
+      home: 'Seattle International Church | Bugema University',
+      sermons: 'Sermons | Seattle International Church',
+      events: 'Events | Seattle International Church',
+      give: 'Give | Seattle International Church',
+      forums: 'Forums | Seattle International Church',
+      blog: 'Blog | Seattle International Church',
+      contact: 'Contact | Seattle International Church',
+    };
+    document.title = titles[currentRoute] || 'Seattle International Church | Bugema University';
+  }, [currentRoute]);
+
+  useEffect(() => {
     localStorage.setItem('admin_authenticated', String(isAdminAuthenticated));
     if (!isAdminAuthenticated) {
       localStorage.removeItem('admin_token');
       localStorage.removeItem('admin_username');
     }
   }, [isAdminAuthenticated]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [mobileMenuOpen]);
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+    setMobileMenuSearch('');
+    setMobileMenuSectionOpen('home-about');
+    setOpenDropdown(null);
+  };
+
+  const goToRouteFromMobile = (route: string) => {
+    setCurrentRoute(route);
+    closeMobileMenu();
+  };
+
+  const mobileMenuSections: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    items: Array<{ label: string; route: string }>;
+  }> = [
+    {
+      id: 'home-about',
+      title: 'Home & About',
+      subtitle: 'Start here, know the church, and plan your first visit.',
+      items: [
+        { label: 'Home', route: 'home' },
+        { label: 'Our Church', route: 'about' },
+        { label: 'Leadership & Staff', route: 'staff' },
+        { label: 'Contact Us', route: 'contact' },
+      ],
+    },
+    {
+      id: 'worship',
+      title: 'Worship',
+      subtitle: 'Gather for worship through sermons, programme, hymns, and live service.',
+      items: [
+        { label: 'Sermon Archive', route: 'sermons' },
+        { label: 'Sabbath Programme', route: 'sabbath-programme' },
+        { label: 'Hymns', route: 'hymns' },
+        { label: 'Watch Live', route: 'watch-live' },
+      ],
+    },
+    {
+      id: 'prayer',
+      title: 'Prayer',
+      subtitle: 'Stand together in prayer and encourage others through testimonies.',
+      items: [
+        { label: 'Prayer Requests', route: 'prayer-requests' },
+        { label: 'Testimonies', route: 'testimonies' },
+      ],
+    },
+    {
+      id: 'growth',
+      title: 'Growth',
+      subtitle: 'Grow in biblical knowledge and discipleship community.',
+      items: [
+        { label: 'Bible Study', route: 'bible-study' },
+        { label: 'Forums', route: 'forums' },
+        { label: 'Blog', route: 'blog' },
+        { label: 'Member Dashboard', route: 'dashboard' },
+      ],
+    },
+    {
+      id: 'community',
+      title: 'Community',
+      subtitle: 'Serve, connect, and join mission-focused outreach.',
+      items: [
+        { label: 'Events', route: 'events' },
+        { label: 'Ministries', route: 'ministries' },
+        { label: 'Community Outreach', route: 'community-outreach' },
+        { label: 'Projects', route: 'projects' },
+        { label: 'Gallery', route: 'gallery' },
+        { label: 'Notices', route: 'announcements' },
+        { label: 'Go Back to School', route: 'go-back-to-school' },
+      ],
+    },
+  ];
+
+  const searchTerm = mobileMenuSearch.trim().toLowerCase();
+  const filteredMobileSections = mobileMenuSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.label.toLowerCase().includes(searchTerm)),
+    }))
+    .filter((section) => section.items.length > 0);
+
+  const openFirstSearchResult = () => {
+    const first = filteredMobileSections[0]?.items[0];
+    if (first) {
+      goToRouteFromMobile(first.route);
+    }
+  };
 
   useEffect(() => {
     setSabbathProgramEditor(JSON.stringify(sabbathProgrammes, null, 2));
@@ -740,13 +1040,38 @@ export default function App() {
     return headers;
   };
 
+  const normalizeEditorialText = (text: string): string => {
+    return text
+      .replace(/\bSeatle\b/gi, 'Seattle')
+      .replace(/\bJhon\b/gi, 'John')
+      .replace(/\bPr\.?\s+/gi, 'Pastor ')
+      .replace(/Come here listen to the word of God/gi, 'Join us as we worship and listen to the Word of God.')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  };
+
+  const normalizeSermon = (item: Sermon): Sermon => ({
+    ...item,
+    title: normalizeEditorialText(item.title),
+    speaker: normalizeEditorialText(item.speaker),
+    passage: normalizeEditorialText(item.passage),
+    category: normalizeEditorialText(item.category),
+  });
+
+  const normalizeEvent = (item: ChurchEvent): ChurchEvent => ({
+    ...item,
+    title: normalizeEditorialText(item.title),
+    location: normalizeEditorialText(item.location),
+    desc: normalizeEditorialText(item.desc),
+  });
+
   const fetchSermons = async () => {
     try {
       const res = await fetch(`${API_URL}/sermons/`);
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.results ?? []);
-        setSermons(list.length > 0 ? list : DEFAULT_SERMONS);
+        setSermons(list.length > 0 ? list.map((s: Sermon) => normalizeSermon(s)) : DEFAULT_SERMONS.map(normalizeSermon));
       }
     } catch {
       // Keep fallback data
@@ -759,7 +1084,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.results ?? []);
-        setEvents(list.length > 0 ? list : DEFAULT_EVENTS);
+        setEvents(list.length > 0 ? list.map((e: ChurchEvent) => normalizeEvent(e)) : DEFAULT_EVENTS.map(normalizeEvent));
       }
     } catch {
       // Keep fallback data
@@ -794,10 +1119,15 @@ export default function App() {
 
   const fetchDonations = async () => {
     try {
-      const res = await fetch(`${API_URL}/payments/`);
+      const res = await fetch(`${API_URL}/donations/`);
       if (res.ok) {
         const data = await res.json();
-        setDonations(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : (data.results ?? []);
+        const normalized = list.map((item: any) => ({
+          ...item,
+          amount: Number(item.amount),
+        }));
+        setDonations(normalized);
       }
     } catch {
       // Local fallback
@@ -876,6 +1206,39 @@ export default function App() {
     const data = await res.json();
     const list = Array.isArray(data) ? data : (data.results ?? []);
     setAnnouncements(list.map(mapAnnouncement));
+  };
+
+  const fetchAdminAuditLogs = async (
+    actionFilter: AdminAuditActionFilter = adminAuditActionFilter,
+    resourceFilter: string = adminAuditResourceFilter
+  ) => {
+    setAdminAuditLoading(true);
+    setAdminAuditError('');
+    try {
+      const params = new URLSearchParams();
+      if (actionFilter !== 'all') {
+        params.set('action', actionFilter);
+      }
+      if (resourceFilter.trim()) {
+        params.set('resource_type', resourceFilter.trim());
+      }
+      const query = params.toString();
+      const res = await fetch(`${API_URL}/admin-audit-logs/${query ? `?${query}` : ''}`, {
+        headers: getAdminAuthHeaders(),
+      });
+
+      if (!res.ok) {
+        throw new Error('Could not load admin audit logs.');
+      }
+
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      setAdminAuditEntries(list);
+    } catch {
+      setAdminAuditError('Unable to fetch audit trail data from backend.');
+    } finally {
+      setAdminAuditLoading(false);
+    }
   };
 
   const normalizeSabbathProgramme = (item: any): SabbathProgram | null => {
@@ -963,6 +1326,12 @@ export default function App() {
   };
 
   const fetchGallery = async () => {
+    if (!isSupabaseConfigured) {
+      setGalleryCloudAvailable(false);
+      setGalleryLoading(false);
+      return;
+    }
+
     setGalleryLoading(true);
     try {
       const { data, error } = await supabase
@@ -970,10 +1339,13 @@ export default function App() {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data && data.length > 0) {
+        setGalleryCloudAvailable(true);
         setGallery(data as GalleryImage[]);
+      } else if (error) {
+        setGalleryCloudAvailable(false);
       }
     } catch {
-      // fallback to DEFAULT_GALLERY
+      setGalleryCloudAvailable(false);
     } finally {
       setGalleryLoading(false);
     }
@@ -1054,6 +1426,10 @@ export default function App() {
   const handleGalleryUpload = async (e: React.FormEvent) => {
 
     e.preventDefault();
+    if (!isSupabaseConfigured) {
+      toast.error('Gallery cloud is not configured. Add Supabase keys in frontend .env.');
+      return;
+    }
     if (!galleryUploadFile) { toast.error('Please select an image file.'); return; }
     setGalleryUploading(true);
     try {
@@ -1125,12 +1501,60 @@ export default function App() {
         throw new Error();
       }
     } catch {
-      const data = { ...prayerForm, id: Date.now() };
+      const data = { ...prayerForm, id: Date.now(), follow_up_status: 'received' as const };
       setPrayers(prev => [...prev, data]);
     }
     triggerLog(`New prayer request submitted by ${prayerForm.name || 'Anonymous'}`);
     toast.success("Your prayer request has been submitted. We are praying with you.");
-    setPrayerForm({ name: '', content: '', confidential: false });
+    setPrayerForm({ name: '', content: '', confidential: false, care_request_type: 'none' });
+  };
+
+  async function fetchTestimonies() {
+    try {
+      const res = await fetch(`${API_URL}/testimonies/`);
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data.results || [];
+      setTestimonies(items);
+    } catch {
+      setTestimonies([]);
+    }
+  }
+
+  const handleTestimonySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = localStorage.getItem('user_token');
+    if (!token) {
+      setShowAuthModal(true);
+      toast.error('Please log in to share a testimony.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/testimonies/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Token ${token}`,
+        },
+        body: JSON.stringify(testimonyForm),
+      });
+
+      if (!res.ok) {
+        throw new Error('Unable to submit testimony at the moment.');
+      }
+      toast.success('Testimony submitted for pastoral review. Thank you for sharing.');
+      triggerLog(`Testimony submitted: ${testimonyForm.title}`);
+      setTestimonyForm({
+        title: '',
+        content: '',
+        testimony_type: 'spiritual_growth',
+        next_step: 'none',
+        image: '',
+      });
+      fetchTestimonies();
+    } catch {
+      toast.error('Submission failed. Please try again.');
+    }
   };
 
   const handleDonationSubmit = async (e: React.FormEvent) => {
@@ -1154,7 +1578,9 @@ export default function App() {
       setDonations(prev => [...prev, data]);
     }
     triggerLog(`Donation received: ${amountNum.toLocaleString()} UGX for ${donationForm.fund}`);
-    toast.success(`Donation of ${amountNum} received for ${donationForm.fund}!`);
+    const donationReference = `DON-${Date.now()}`;
+    setDonationReceipt({ reference: donationReference, amount: amountNum, fund: donationForm.fund });
+    toast.success(`Donation of ${amountNum} received for ${donationForm.fund}! Ref: ${donationReference}`);
     setDonationForm({ amount: '', fund: 'Tithe', method: 'Mobile Money' });
   };
 
@@ -1165,12 +1591,41 @@ export default function App() {
     setContactForm({ name: '', email: '', message: '' });
   };
 
-  const handleEventRegSubmit = (e: React.FormEvent) => {
+  const handleEventRegSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    triggerLog(`Registration received from ${eventRegForm.name} for event: ${registeringEvent?.title}`);
-    toast.success("Successfully registered for the event!");
-    setEventRegForm({ name: '', email: '', phone: '', notes: '' });
-    setRegisteringEvent(null);
+    if (!registeringEvent) return;
+
+    const token = localStorage.getItem('user_token');
+    if (!token) {
+      toast.error('Please log in first to register for events.');
+      setAuthMode('login');
+      setShowAuthModal(true);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/events/${registeringEvent.id}/register/`, {
+        method: 'POST',
+        headers: { Authorization: `Token ${token}` },
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Could not register for the event.');
+      }
+
+      const data = await res.json();
+      const reference = data?.id ? `EVR-${String(data.id).padStart(4, '0')}` : `EVR-${Date.now()}`;
+
+      triggerLog(`Registration received from ${eventRegForm.name} for event: ${registeringEvent.title}`);
+      toast.success(`Successfully registered. Ref: ${reference}`);
+      setEventReceipt({ eventTitle: registeringEvent.title, reference });
+      setEventRegForm({ name: '', email: '', phone: '', notes: '' });
+      setRegisteringEvent(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not register for the event.';
+      toast.error(message);
+    }
   };
 
   const handleChatSend = (e: React.FormEvent) => {
@@ -1610,8 +2065,48 @@ export default function App() {
   };
 
   // Filter systems
-  const filteredSermons = sermons
-    .filter((s: Sermon) => selectedSermonCat === 'all' || s.category === selectedSermonCat);
+  const filteredSermons = sermons.filter((s: Sermon) => {
+    const categoryMatch = selectedSermonCat === 'all' || s.category === selectedSermonCat;
+    const q = sermonSearchTerm.trim().toLowerCase();
+    const searchMatch =
+      q.length === 0 ||
+      s.title.toLowerCase().includes(q) ||
+      s.speaker.toLowerCase().includes(q) ||
+      s.passage.toLowerCase().includes(q);
+    return categoryMatch && searchMatch;
+  });
+
+  const featuredSermon = filteredSermons[0] || sermons[0] || null;
+  const sermonsPerPage = 6;
+  const totalSermonPages = Math.max(1, Math.ceil(filteredSermons.length / sermonsPerPage));
+  const paginatedSermons = filteredSermons.slice((sermonPage - 1) * sermonsPerPage, sermonPage * sermonsPerPage);
+
+  const parsedEvents = (Array.isArray(events) ? events : DEFAULT_EVENTS).map((event) => ({
+    ...event,
+    parsedDate: new Date(event.date),
+  }));
+  const now = new Date();
+  const thisWeekEnd = new Date(now);
+  thisWeekEnd.setDate(now.getDate() + 7);
+
+  const eventsThisWeek = parsedEvents.filter((e) => e.parsedDate >= now && e.parsedDate <= thisWeekEnd);
+  const upcomingEvents = parsedEvents.filter((e) => e.parsedDate > thisWeekEnd);
+  const pastEvents = parsedEvents.filter((e) => e.parsedDate < now).sort((a, b) => b.parsedDate.getTime() - a.parsedDate.getTime());
+  const thisSabbathEvent = eventsThisWeek[0] || upcomingEvents[0] || parsedEvents[0] || null;
+
+  const weeklyEssentialsDone = Object.values(weeklyEssentialsProgress).filter(Boolean).length;
+  const weeklyEssentialsTotal = WEEKLY_ESSENTIALS.length;
+  const essentialCompletionPercent = Math.round((weeklyEssentialsDone / weeklyEssentialsTotal) * 100);
+
+  const priorityScore: Record<string, number> = { high: 0, normal: 1, low: 2 };
+  const weeklyPriorityNotices = [...announcements]
+    .sort((a, b) => {
+      const scoreA = priorityScore[a.priority] ?? 3;
+      const scoreB = priorityScore[b.priority] ?? 3;
+      if (scoreA !== scoreB) return scoreA - scoreB;
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    })
+    .slice(0, 3);
 
   const gallerySource = gallery.length > 0 ? gallery : DEFAULT_GALLERY.map(g => ({ ...g, img_url: g.img }));
   const filteredGallery = selectedGalleryAlbum === 'all' 
@@ -1641,9 +2136,14 @@ export default function App() {
           localStorage.setItem('admin_token', data.token);
         }
         localStorage.setItem('admin_username', data?.username || adminLoginForm.username);
-        setIsAdminAuthenticated(true);
+        const validSession = await verifyAdminSession();
+        if (!validSession) {
+          setAdminLoginError('Unable to verify staff session. Please sign in again.');
+          return;
+        }
         fetchAdminAnnouncements();
         fetchProjects(true);
+        fetchAdminAuditLogs();
         triggerLog(`Admin logged in: ${data?.username || adminLoginForm.username}`);
         toast.success('Welcome back, Administrator!');
       } else {
@@ -1655,6 +2155,48 @@ export default function App() {
       setAdminLoginLoading(false);
     }
   };
+
+  const verifyAdminSession = async () => {
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      setIsAdminAuthenticated(false);
+      return false;
+    }
+
+    setIsAdminSessionChecking(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/session/`, {
+        headers: {
+          Authorization: `Token ${adminToken}`,
+        },
+      });
+
+      if (!res.ok) {
+        setIsAdminAuthenticated(false);
+        return false;
+      }
+
+      const data = await res.json();
+      const allowed = Boolean(data?.authenticated && data?.is_staff);
+      setIsAdminAuthenticated(allowed);
+      if (!allowed) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_username');
+      }
+      return allowed;
+    } catch {
+      setIsAdminAuthenticated(false);
+      return false;
+    } finally {
+      setIsAdminSessionChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentRoute === 'admin' && isAdminAuthenticated) {
+      void verifyAdminSession();
+    }
+  }, [currentRoute]);
 
   const handleAdminLogout = () => {
     setIsAdminAuthenticated(false);
@@ -1669,18 +2211,11 @@ export default function App() {
   return (
     <div>
       <Toaster position="top-right" />
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       {/* Top Bar with Tagline & Social / Admin Link */}
       <div className="top-bar">
         <div className="container top-bar-content">
           <span className="tagline">Growing in Christ • Serving the World • Sharing Hope</span>
-          <div className="top-bar-right">
-            <button onClick={() => setCurrentRoute('admin')} className="admin-link" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-              Admin Portal
-            </button>
-          </div>
         </div>
       </div>
 
@@ -1713,21 +2248,21 @@ export default function App() {
               Home
             </button>
 
-            {/* Sermons Dropdown */}
+            {/* Worship Dropdown */}
             <div className="nav-dropdown" onMouseLeave={() => setOpenDropdown(null)}>
               <button
-                onClick={() => setOpenDropdown(openDropdown === 'sermons' ? null : 'sermons')}
-                onMouseEnter={() => setOpenDropdown('sermons')}
-                className={`nav-link ${['sermons', 'sabbath-programme'].includes(currentRoute) ? 'active' : ''}`}
+                onClick={() => setOpenDropdown(openDropdown === 'worship' ? null : 'worship')}
+                onMouseEnter={() => setOpenDropdown('worship')}
+                className={`nav-link ${['sermons', 'sabbath-programme', 'hymns', 'watch-live'].includes(currentRoute) ? 'active' : ''}`}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
-                Sermons
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" style={{ transition: 'transform 0.3s', transform: openDropdown === 'sermons' ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                Worship
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" style={{ transition: 'transform 0.3s', transform: openDropdown === 'worship' ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                   <path d="M2 4L6 8L10 4" />
                 </svg>
               </button>
-              {openDropdown === 'sermons' && (
-                <div className="dropdown-menu" onMouseEnter={() => setOpenDropdown('sermons')}>
+              {openDropdown === 'worship' && (
+                <div className="dropdown-menu" onMouseEnter={() => setOpenDropdown('worship')}>
                   <button
                     onClick={() => { setCurrentRoute('sermons'); setMobileMenuOpen(false); setOpenDropdown(null); }}
                     className={`dropdown-item ${currentRoute === 'sermons' ? 'active' : ''}`}
@@ -1742,18 +2277,23 @@ export default function App() {
                     <Calendar size={18} />
                     <span>Sabbath Programme</span>
                   </button>
+                  <button
+                    onClick={() => { setCurrentRoute('hymns'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+                    className={`dropdown-item ${currentRoute === 'hymns' ? 'active' : ''}`}
+                  >
+                    <Music size={18} />
+                    <span>Hymns</span>
+                  </button>
+                  <button
+                    onClick={() => { setCurrentRoute('watch-live'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+                    className={`dropdown-item ${currentRoute === 'watch-live' ? 'active' : ''}`}
+                  >
+                    <MapIcon size={18} />
+                    <span>Watch Live</span>
+                  </button>
                 </div>
               )}
             </div>
-
-            {/* Bible Study */}
-            <button
-              onClick={() => { setCurrentRoute('bible-study'); setMobileMenuOpen(false); setOpenDropdown(null); }}
-              className={`nav-link ${currentRoute === 'bible-study' ? 'active' : ''}`}
-              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              Bible Study
-            </button>
 
             {/* Prayer Dropdown */}
             <div className="nav-dropdown" onMouseLeave={() => setOpenDropdown(null)}>
@@ -1784,13 +2324,55 @@ export default function App() {
                     <BookOpen size={18} />
                     <span>Testimonies</span>
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* Growth Dropdown */}
+            <div className="nav-dropdown" onMouseLeave={() => setOpenDropdown(null)}>
+              <button
+                onClick={() => setOpenDropdown(openDropdown === 'growth' ? null : 'growth')}
+                onMouseEnter={() => setOpenDropdown('growth')}
+                className={`nav-link ${['bible-study', 'forums', 'blog', 'dashboard'].includes(currentRoute) ? 'active' : ''}`}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                Growth
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" style={{ transition: 'transform 0.3s', transform: openDropdown === 'growth' ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                  <path d="M2 4L6 8L10 4" />
+                </svg>
+              </button>
+              {openDropdown === 'growth' && (
+                <div className="dropdown-menu">
                   <button
-                    onClick={() => { setCurrentRoute('hymns'); setMobileMenuOpen(false); setOpenDropdown(null); }}
-                    className={`dropdown-item ${currentRoute === 'hymns' ? 'active' : ''}`}
+                    onClick={() => { setCurrentRoute('bible-study'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+                    className={`dropdown-item ${currentRoute === 'bible-study' ? 'active' : ''}`}
                   >
-                    <Music size={18} />
-                    <span>Hymns</span>
+                    <BookOpen size={18} />
+                    <span>Bible Study</span>
                   </button>
+                  <button
+                    onClick={() => { setCurrentRoute('forums'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+                    className={`dropdown-item ${currentRoute === 'forums' ? 'active' : ''}`}
+                  >
+                    <MessageSquare size={18} />
+                    <span>Forums</span>
+                  </button>
+                  <button
+                    onClick={() => { setCurrentRoute('blog'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+                    className={`dropdown-item ${currentRoute === 'blog' ? 'active' : ''}`}
+                  >
+                    <Calendar size={18} />
+                    <span>Blog</span>
+                  </button>
+                  {isLoggedIn && (
+                    <button
+                      onClick={() => { setCurrentRoute('dashboard'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+                      className={`dropdown-item ${currentRoute === 'dashboard' ? 'active' : ''}`}
+                    >
+                      <User size={18} />
+                      <span>Member Dashboard</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1800,7 +2382,7 @@ export default function App() {
               <button
                 onClick={() => setOpenDropdown(openDropdown === 'community' ? null : 'community')}
                 onMouseEnter={() => setOpenDropdown('community')}
-                className={`nav-link ${['events', 'forums', 'ministries', 'gallery', 'community-outreach', 'go-back-to-school'].includes(currentRoute) ? 'active' : ''}`}
+                className={`nav-link ${['events', 'ministries', 'gallery', 'community-outreach', 'go-back-to-school', 'projects', 'announcements'].includes(currentRoute) ? 'active' : ''}`}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
                 Community
@@ -1816,13 +2398,6 @@ export default function App() {
                   >
                     <Calendar size={18} />
                     <span>Events</span>
-                  </button>
-                  <button
-                    onClick={() => { setCurrentRoute('forums'); setMobileMenuOpen(false); setOpenDropdown(null); }}
-                    className={`dropdown-item ${currentRoute === 'forums' ? 'active' : ''}`}
-                  >
-                    <MessageSquare size={18} />
-                    <span>Forums</span>
                   </button>
                   <button
                     onClick={() => { setCurrentRoute('ministries'); setMobileMenuOpen(false); setOpenDropdown(null); }}
@@ -1852,28 +2427,33 @@ export default function App() {
                     <Award size={18} />
                     <span>Go Back to School</span>
                   </button>
+                  <button
+                    onClick={() => { setCurrentRoute('projects'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+                    className={`dropdown-item ${currentRoute === 'projects' ? 'active' : ''}`}
+                  >
+                    <HandHelping size={18} />
+                    <span>Projects</span>
+                  </button>
+                  <button
+                    onClick={() => { setCurrentRoute('announcements'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+                    className={`dropdown-item ${currentRoute === 'announcements' ? 'active' : ''}`}
+                  >
+                    <Award size={18} />
+                    <span>Notices</span>
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Notices */}
-            <button
-              onClick={() => { setCurrentRoute('announcements'); setMobileMenuOpen(false); setOpenDropdown(null); }}
-              className={`nav-link ${currentRoute === 'announcements' ? 'active' : ''}`}
-              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              Notices
-            </button>
-
-            {/* About Us Dropdown */}
+            {/* About Dropdown */}
             <div className="nav-dropdown" onMouseLeave={() => setOpenDropdown(null)}>
               <button
                 onClick={() => setOpenDropdown(openDropdown === 'about' ? null : 'about')}
                 onMouseEnter={() => setOpenDropdown('about')}
-                className={`nav-link ${['about', 'blog', 'staff', 'contact'].includes(currentRoute) ? 'active' : ''}`}
+                className={`nav-link ${['about', 'staff', 'contact'].includes(currentRoute) ? 'active' : ''}`}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
-                About Us
+                About
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" style={{ transition: 'transform 0.3s', transform: openDropdown === 'about' ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                   <path d="M2 4L6 8L10 4" />
                 </svg>
@@ -1986,7 +2566,12 @@ export default function App() {
               )}
             </div>
           </nav>
-          <button className="mobile-nav-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          <button
+            className={`mobile-nav-toggle ${mobileMenuOpen ? 'active' : ''}`}
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
+          >
             <span></span>
             <span></span>
             <span></span>
@@ -1994,8 +2579,96 @@ export default function App() {
         </div>
       </header>
 
+      <div className={`mobile-menu-overlay ${mobileMenuOpen ? 'active' : ''}`} aria-hidden={!mobileMenuOpen}>
+        <button className="mobile-menu-backdrop" onClick={closeMobileMenu} aria-label="Close mobile menu" />
+
+        <aside className="mobile-menu-panel" role="dialog" aria-modal="true" aria-label="Mobile navigation">
+          <div className="mobile-menu-top-row">
+            <div className="mobile-menu-brand">Seattle International Church</div>
+            <button className="mobile-menu-close" onClick={closeMobileMenu} aria-label="Close menu">
+              <X size={20} />
+            </button>
+          </div>
+
+          <form
+            className="mobile-menu-search-row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              openFirstSearchResult();
+            }}
+          >
+            <div className="mobile-menu-search-box">
+              <Search size={16} />
+              <input
+                type="search"
+                value={mobileMenuSearch}
+                onChange={(e) => setMobileMenuSearch(e.target.value)}
+                placeholder="Search..."
+                aria-label="Search menu"
+              />
+            </div>
+            <button className="mobile-menu-search-btn" type="submit">Search</button>
+          </form>
+
+          <div className="mobile-menu-sections">
+            {filteredMobileSections.map((section) => (
+              <div key={section.id} className="mobile-menu-section">
+                <button
+                  className="mobile-section-toggle"
+                  onClick={() => setMobileMenuSectionOpen((prev) => (prev === section.id ? '' : section.id))}
+                  aria-expanded={mobileMenuSectionOpen === section.id}
+                >
+                  <span className="mobile-section-heading-block">
+                    <span className="mobile-section-title">{section.title}</span>
+                    <span className="mobile-section-subtitle">{section.subtitle}</span>
+                  </span>
+                  <ChevronDown size={16} style={{ transform: mobileMenuSectionOpen === section.id ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
+                </button>
+
+                {mobileMenuSectionOpen === section.id && (
+                  <div className="mobile-section-items">
+                    {section.items.map((item) => (
+                      <button
+                        key={item.route}
+                        className={`mobile-route-btn ${currentRoute === item.route ? 'active' : ''}`}
+                        onClick={() => goToRouteFromMobile(item.route)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <button className="mobile-study-btn" onClick={() => goToRouteFromMobile('bible-study')}>Start Bible Study</button>
+
+          <div className="mobile-short-links">
+            <button onClick={() => goToRouteFromMobile('contact')}>Plan a Visit</button>
+            <button onClick={() => goToRouteFromMobile('blog')}>Church News</button>
+          </div>
+
+          <div className="mobile-menu-cta-row">
+            <button className="mobile-give-btn" onClick={() => goToRouteFromMobile('give')}>Give</button>
+            <button className="mobile-live-btn" onClick={() => goToRouteFromMobile('watch-live')}>Watch Live</button>
+          </div>
+
+          <div className="mobile-menu-footer-copy">
+            Seattle International Church at Bugema University exists to help students and families grow in Christ, serve with compassion, and live with hope.
+          </div>
+        </aside>
+      </div>
+
       {/* Content wrapper */}
-      <main className="content-wrapper">
+      <main id="main-content" className="content-wrapper">
+        {eventReceipt && currentRoute === 'events' && (
+          <div className="container" style={{ marginTop: '1rem' }}>
+            <div className="card" style={{ borderLeft: '4px solid #16a34a', padding: '0.9rem 1rem' }}>
+              <strong>Registration confirmed:</strong> {eventReceipt.eventTitle} • Reference {eventReceipt.reference}
+            </div>
+          </div>
+        )}
         
         <AnimatePresence>
         {/* ================= HOME VIEW ================= */}
@@ -2014,8 +2687,12 @@ export default function App() {
                 <motion.h1 className="hero-title" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.15 }}>Seattle International Church</motion.h1>
                 <motion.p className="hero-location" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.3 }}>Bugema University, Uganda</motion.p>
                 <motion.p className="hero-subtitle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.45 }}>Welcome to a Christ-Centered International Family of Faith — Growing in Grace, Serving the World, Sharing Hope.</motion.p>
+                <motion.p className="hero-subtitle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.5 }} style={{ fontWeight: 600 }}>
+                  {CORE_MISSION_STATEMENT}
+                </motion.p>
                 <motion.div className="hero-actions" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.6 }}>
                   <button onClick={() => setCurrentRoute('contact')} className="btn btn-hero-primary">Plan Your Visit</button>
+                  <button onClick={() => setCurrentRoute('prayer-requests')} className="btn btn-hero-primary">Join Prayer</button>
                   <button onClick={() => setCurrentRoute('watch-live')} className="btn btn-hero-outline">
                     <span className="pulse-dot"></span>
                     Watch Live
@@ -2043,6 +2720,143 @@ export default function App() {
                 </motion.div>
               ))}
             </motion.div>
+
+            {thisSabbathEvent && (
+              <div className="container" style={{ marginTop: '1.25rem' }}>
+                <motion.div className="card" variants={fadeUp} initial="hidden" animate="visible" style={{ borderLeft: '4px solid var(--accent)', display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>This Sabbath</p>
+                    <h3 style={{ marginBottom: '0.3rem' }}>{thisSabbathEvent.title}</h3>
+                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>{thisSabbathEvent.date} • {thisSabbathEvent.location}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                    <button onClick={() => setCurrentRoute('events')} className="btn btn-outline btn-small">View Details</button>
+                    <button onClick={() => setCurrentRoute('contact')} className="btn btn-accent btn-small">Get Directions</button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+
+            <div className="container" style={{ marginTop: '1rem' }}>
+              {!weeklyPromptDismissed && (
+                <motion.div className="weekly-prompt-card" variants={fadeUp} initial="hidden" animate="visible">
+                  <div>
+                    <p className="weekly-kicker">Weekly check-in</p>
+                    <h3 style={{ marginBottom: '0.35rem' }}>Your church week starts here</h3>
+                    <p style={{ marginBottom: 0, color: 'var(--text-muted)' }}>
+                      Review the programme, notices, and prayer priorities so you stay aligned with this week&apos;s mission.
+                    </p>
+                  </div>
+                  <div className="weekly-prompt-actions">
+                    <button className="btn btn-primary btn-small" onClick={() => setCurrentRoute('announcements')}>Start Weekly Check</button>
+                    <button className="btn btn-outline btn-small" onClick={dismissWeeklyPrompt}>Dismiss</button>
+                  </div>
+                </motion.div>
+              )}
+
+              <div className="grid grid-2 gap-3 margin-top-2">
+                <motion.div className="card weekly-essentials-card" variants={fadeUp} initial="hidden" animate="visible">
+                  <div className="weekly-header-row">
+                    <div>
+                      <p className="weekly-kicker">This Week at SIC</p>
+                      <h3 style={{ marginBottom: '0.2rem' }}>Essentials for Every Member</h3>
+                    </div>
+                    <span className="weekly-progress-pill">{weeklyEssentialsDone}/{weeklyEssentialsTotal}</span>
+                  </div>
+                  <div className="weekly-progress-track" aria-hidden="true">
+                    <div className="weekly-progress-fill" style={{ width: `${essentialCompletionPercent}%` }} />
+                  </div>
+                  <div className="weekly-essentials-list">
+                    {WEEKLY_ESSENTIALS.map((item) => (
+                      <div key={item.id} className="weekly-essential-item">
+                        <div className="weekly-essential-copy">
+                          <span className={`weekly-check ${weeklyEssentialsProgress[item.id] ? 'done' : ''}`}>
+                            {weeklyEssentialsProgress[item.id] ? '✓' : '○'}
+                          </span>
+                          <span>{item.label}</span>
+                        </div>
+                        <button className="btn btn-outline btn-small" onClick={() => completeWeeklyEssential(item.id, item.route)}>
+                          {item.cta}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+
+                <motion.div className="card weekly-notices-card" variants={fadeUp} initial="hidden" animate="visible">
+                  <div className="weekly-header-row">
+                    <div>
+                      <p className="weekly-kicker">Must Read</p>
+                      <h3 style={{ marginBottom: '0.2rem' }}>Priority Notices</h3>
+                    </div>
+                    <button className="btn btn-outline btn-small" onClick={() => setCurrentRoute('announcements')}>All Notices</button>
+                  </div>
+                  <div className="weekly-notice-list">
+                    {weeklyPriorityNotices.map((notice) => (
+                      <div key={notice.id} className="weekly-notice-item">
+                        <span className={`notice-priority ${notice.priority}`}>{notice.priority.toUpperCase()}</span>
+                        <div>
+                          <p style={{ marginBottom: '0.2rem', fontWeight: 700 }}>{notice.title}</p>
+                          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.86rem' }}>{notice.date}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {weeklyPriorityNotices.length === 0 && (
+                      <p style={{ margin: 0, color: 'var(--text-muted)' }}>No notices yet. Check back this week.</p>
+                    )}
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+
+            <div className="section-padding" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
+              <div className="container">
+                <motion.div className="card" variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} style={{ marginBottom: '1rem', borderLeft: '4px solid var(--accent)' }}>
+                  <h3 style={{ marginBottom: '0.4rem' }}>Our Shared Mission</h3>
+                  <p style={{ marginBottom: '0.75rem', color: 'var(--text-muted)' }}>{CORE_MISSION_STATEMENT}</p>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button onClick={() => setCurrentRoute('about')} className="btn btn-outline btn-small">See Mission & Values</button>
+                    <button onClick={() => setCurrentRoute('testimonies')} className="btn btn-accent btn-small">Read Testimonies</button>
+                  </div>
+                </motion.div>
+                <motion.div className="grid grid-3 gap-3" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+                  <motion.div className="card" variants={staggerItem} whileHover={{ y: -4 }}>
+                    <h3 style={{ marginBottom: '0.5rem' }}>New Here?</h3>
+                    <p style={{ color: 'var(--text-muted)' }}>Get service times, directions, and what to expect for your first Sabbath with us.</p>
+                    <button onClick={() => setCurrentRoute('contact')} className="btn btn-primary btn-small">Plan Your Visit</button>
+                  </motion.div>
+                  <motion.div className="card" variants={staggerItem} whileHover={{ y: -4 }}>
+                    <h3 style={{ marginBottom: '0.5rem' }}>Need Prayer?</h3>
+                    <p style={{ color: 'var(--text-muted)' }}>Share a request with our prayer team and let the church stand with you in faith.</p>
+                    <button onClick={() => setCurrentRoute('prayer-requests')} className="btn btn-outline btn-small">Submit Prayer Request</button>
+                  </motion.div>
+                  <motion.div className="card" variants={staggerItem} whileHover={{ y: -4 }}>
+                    <h3 style={{ marginBottom: '0.5rem' }}>Support Ministry</h3>
+                    <p style={{ color: 'var(--text-muted)' }}>Give securely toward tithe, offerings, student outreach, and mission projects.</p>
+                    <button onClick={() => setCurrentRoute('give')} className="btn btn-accent btn-small">Give Now</button>
+                  </motion.div>
+                </motion.div>
+              </div>
+            </div>
+
+            <div className="section-padding bg-light" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
+              <div className="container">
+                <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+                  <h2 className="section-title text-center">Your Next Faith Step</h2>
+                  <p className="section-subtitle text-center">A practical discipleship path rooted in prayer, community, and growth.</p>
+                </motion.div>
+                <motion.div className="grid grid-3 gap-3 margin-top-2" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+                  {DISCIPLESHIP_PATH.map((step, idx) => (
+                    <motion.div key={step.id} className="card" variants={staggerItem} whileHover={{ y: -4 }}>
+                      <p className="weekly-kicker">Step {idx + 1}</p>
+                      <h3 style={{ marginBottom: '0.5rem' }}>{step.title}</h3>
+                      <p style={{ color: 'var(--text-muted)', marginBottom: '0.9rem' }}>{step.desc}</p>
+                      <button onClick={() => setCurrentRoute(step.route)} className="btn btn-outline btn-small">Continue</button>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+            </div>
 
             <div className="section-padding bg-light">
               <motion.div className="container grid grid-2 gap-4" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }}>
@@ -2281,6 +3095,24 @@ export default function App() {
                   </motion.div>
 
                 </div>
+
+                <motion.div className="grid grid-3 gap-3 margin-top-3" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+                  <motion.div className="card dark-card" variants={staggerItem}>
+                    <h3 style={{ color: '#D4AF37', marginBottom: '0.5rem' }}>Mission Impact</h3>
+                    <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: '0.5rem' }}>Prayer requests this week: <strong>{prayers.length}</strong></p>
+                    <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 0 }}>Public testimonies published: <strong>{testimonies.length}</strong></p>
+                  </motion.div>
+                  <motion.div className="card dark-card" variants={staggerItem}>
+                    <h3 style={{ color: '#D4AF37', marginBottom: '0.5rem' }}>Growth Movement</h3>
+                    <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: '0.5rem' }}>Bible study registrations: <strong>{bibleStudies.length}</strong></p>
+                    <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 0 }}>Weekly essentials completed: <strong>{weeklyEssentialsDone}/{weeklyEssentialsTotal}</strong></p>
+                  </motion.div>
+                  <motion.div className="card dark-card" variants={staggerItem}>
+                    <h3 style={{ color: '#D4AF37', marginBottom: '0.5rem' }}>Care & Strengthening</h3>
+                    <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: '0.5rem' }}>Prayer support actions: <strong>{Object.values(prayerSupport).reduce((sum, value) => sum + value, 0)}</strong></p>
+                    <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 0 }}>Community praises shared: <strong>{praiseWall.length}</strong></p>
+                  </motion.div>
+                </motion.div>
               </div>
             </div>
           </motion.div>
@@ -2433,6 +3265,18 @@ export default function App() {
 
             <div className="section-padding">
               <div className="container">
+                {featuredSermon && (
+                  <motion.div className="card sermon-featured-card" variants={fadeUp} initial="hidden" animate="visible" style={{ marginBottom: '1.25rem', borderLeft: '4px solid var(--primary)' }}>
+                    <p className="sermon-featured-kicker" style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Featured Message</p>
+                    <h2 className="sermon-featured-title" style={{ marginBottom: '0.45rem' }}>{featuredSermon.title}</h2>
+                    <p className="sermon-featured-meta" style={{ color: 'var(--text-muted)', marginBottom: '0.65rem' }}>Speaker: <strong>{featuredSermon.speaker}</strong> • {featuredSermon.passage} • {featuredSermon.date}</p>
+                    <div className="sermon-featured-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button onClick={() => setCurrentRoute('watch-live')} className="btn btn-primary btn-small">Watch Sermon</button>
+                      <button onClick={() => setCurrentRoute('forums')} className="btn btn-outline btn-small">Discuss This Sermon</button>
+                    </div>
+                  </motion.div>
+                )}
+
                 <div className="sermon-filters">
                   {['all', 'Sabbath Sermons', 'Week of Prayer', 'Evangelistic Series', 'Bible Studies'].map(cat => (
                     <button 
@@ -2445,8 +3289,20 @@ export default function App() {
                   ))}
                 </div>
 
+                <div className="margin-top-2 sermon-search-wrap" style={{ maxWidth: '460px' }}>
+                  <input
+                    type="search"
+                    value={sermonSearchTerm}
+                    onChange={(e) => setSermonSearchTerm(e.target.value)}
+                    placeholder="Search by title, speaker, or Bible text"
+                    aria-label="Search sermons"
+                    className="sermon-search-input"
+                    style={{ width: '100%', padding: '0.7rem 0.9rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}
+                  />
+                </div>
+
                 <motion.div className="grid grid-3 gap-3 margin-top-3" variants={staggerContainer} initial="hidden" animate="visible">
-                  {Array.isArray(filteredSermons) && filteredSermons.map(s => (
+                  {Array.isArray(paginatedSermons) && paginatedSermons.map(s => (
                     <motion.div key={s.id} className="card sermon-card" variants={staggerItem} layout whileHover={{ y: -4 }}>
                       <span className="badge badge-accent">{s.category}</span>
                       <h3 className="margin-top-2">{s.title}</h3>
@@ -2459,6 +3315,20 @@ export default function App() {
                     </motion.div>
                   ))}
                 </motion.div>
+
+                {filteredSermons.length === 0 && (
+                  <div className="card margin-top-3" style={{ textAlign: 'center' }}>
+                    No sermons matched your search. Try another keyword or category.
+                  </div>
+                )}
+
+                {totalSermonPages > 1 && (
+                  <div className="sermon-pagination" style={{ display: 'flex', justifyContent: 'center', gap: '0.6rem', marginTop: '1.2rem', flexWrap: 'wrap' }}>
+                    <button className="btn btn-outline btn-small" disabled={sermonPage === 1} onClick={() => setSermonPage((p) => Math.max(1, p - 1))}>Previous</button>
+                    <span className="sermon-pagination-text" style={{ alignSelf: 'center', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Page {sermonPage} of {totalSermonPages}</span>
+                    <button className="btn btn-outline btn-small" disabled={sermonPage === totalSermonPages} onClick={() => setSermonPage((p) => Math.min(totalSermonPages, p + 1))}>Next</button>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -2483,20 +3353,64 @@ export default function App() {
 
             <div className="section-padding">
               <div className="container">
-                <motion.div className="grid grid-2 gap-4" variants={staggerContainer} initial="hidden" animate="visible">
-                  {(Array.isArray(events) ? events : DEFAULT_EVENTS).map(e => (
-                    <motion.div key={e.id} className="card event-card" variants={staggerItem} whileHover={{ y: -5 }}>
-                      <div className="event-banner-placeholder">
-                        {e.title}
-                        <span className="event-date-badge">{e.date}</span>
-                      </div>
-                      <h3>{e.title}</h3>
-                      <p className="text-muted font-size-sm">Venue: <strong>{e.location}</strong></p>
-                      <p className="margin-top-1">{e.desc}</p>
-                      <motion.button onClick={() => setRegisteringEvent(e)} className="btn btn-accent btn-small margin-top-2" whileTap={{ scale: 0.97 }}>Register for Event</motion.button>
+                <section>
+                  <h2 style={{ marginBottom: '0.75rem' }}>This Week</h2>
+                  {eventsThisWeek.length === 0 ? (
+                    <div className="card" style={{ color: 'var(--text-muted)' }}>No events scheduled in the next 7 days.</div>
+                  ) : (
+                    <motion.div className="grid grid-2 gap-4" variants={staggerContainer} initial="hidden" animate="visible">
+                      {eventsThisWeek.map(e => (
+                        <motion.div key={e.id} className="card event-card" variants={staggerItem} whileHover={{ y: -5 }}>
+                          <div className="event-banner-placeholder">
+                            {e.title}
+                            <span className="event-date-badge">{e.date}</span>
+                          </div>
+                          <h3>{e.title}</h3>
+                          <p className="text-muted font-size-sm">Venue: <strong>{e.location}</strong></p>
+                          <p className="margin-top-1">{e.desc}</p>
+                          <motion.button onClick={() => setRegisteringEvent(e)} className="btn btn-accent btn-small margin-top-2" whileTap={{ scale: 0.97 }}>Register for Event</motion.button>
+                        </motion.div>
+                      ))}
                     </motion.div>
-                  ))}
-                </motion.div>
+                  )}
+                </section>
+
+                <section className="margin-top-4">
+                  <h2 style={{ marginBottom: '0.75rem' }}>Upcoming</h2>
+                  {upcomingEvents.length === 0 ? (
+                    <div className="card" style={{ color: 'var(--text-muted)' }}>No additional upcoming events right now.</div>
+                  ) : (
+                    <motion.div className="grid grid-2 gap-4" variants={staggerContainer} initial="hidden" animate="visible">
+                      {upcomingEvents.map(e => (
+                        <motion.div key={e.id} className="card event-card" variants={staggerItem} whileHover={{ y: -5 }}>
+                          <div className="event-banner-placeholder">
+                            {e.title}
+                            <span className="event-date-badge">{e.date}</span>
+                          </div>
+                          <h3>{e.title}</h3>
+                          <p className="text-muted font-size-sm">Venue: <strong>{e.location}</strong></p>
+                          <p className="margin-top-1">{e.desc}</p>
+                          <motion.button onClick={() => setRegisteringEvent(e)} className="btn btn-accent btn-small margin-top-2" whileTap={{ scale: 0.97 }}>Register for Event</motion.button>
+                        </motion.div>
+                      ))}
+                    </motion.div>
+                  )}
+                </section>
+
+                {pastEvents.length > 0 && (
+                  <section className="margin-top-4">
+                    <h2 style={{ marginBottom: '0.75rem' }}>Past Highlights</h2>
+                    <div className="grid grid-2 gap-3">
+                      {pastEvents.slice(0, 4).map((e) => (
+                        <div key={e.id} className="card">
+                          <h3 style={{ marginBottom: '0.3rem' }}>{e.title}</h3>
+                          <p className="text-muted" style={{ marginBottom: '0.35rem' }}>{e.date} • {e.location}</p>
+                          <p style={{ marginBottom: 0 }}>{e.desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
               </div>
             </div>
           </motion.div>
@@ -2528,6 +3442,11 @@ export default function App() {
 
             <div className="section-padding">
               <div className="container">
+                {!galleryCloudAvailable && (
+                  <div className="card" style={{ borderLeft: '4px solid #f59e0b', marginBottom: '1rem' }}>
+                    Cloud gallery is disabled or unavailable in this environment. Showing local sample photos.
+                  </div>
+                )}
                 <div className="gallery-albums">
                   {['all', ...Array.from(new Set(gallerySource.map(g => g.album)))].map(album => (
                     <button 
@@ -2843,6 +3762,19 @@ export default function App() {
                     />
                     <label htmlFor="prayer-check">Keep this request strictly confidential (Pastors only)</label>
                   </div>
+                  <div className="form-group">
+                    <label>Would you like a care follow-up?</label>
+                    <select
+                      value={prayerForm.care_request_type}
+                      onChange={(e) => setPrayerForm({ ...prayerForm, care_request_type: e.target.value as 'none' | 'pastoral_call' | 'elder_visit' | 'counseling' | 'prayer_partner' })}
+                    >
+                      <option value="none">No additional care needed</option>
+                      <option value="pastoral_call">Pastoral call</option>
+                      <option value="elder_visit">Elder visit</option>
+                      <option value="counseling">Counseling support</option>
+                      <option value="prayer_partner">Prayer partner</option>
+                    </select>
+                  </div>
                   <button type="submit" className="btn btn-primary btn-block">Submit Request</button>
                 </form>
 
@@ -2867,6 +3799,10 @@ export default function App() {
                       <motion.div key={i} className="card" variants={staggerItem} whileHover={{ y: -3 }}>
                         <p style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>"{pr.content}"</p>
                         <p style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>— <strong>{pr.name || 'Anonymous'}</strong></p>
+                        <p style={{ marginTop: '0.4rem', marginBottom: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          Follow-up: <strong>{FOLLOW_UP_STATUS_LABELS[pr.follow_up_status || 'received']}</strong>
+                          {pr.care_request_type && pr.care_request_type !== 'none' ? ` • Care: ${CARE_REQUEST_LABELS[pr.care_request_type]}` : ''}
+                        </p>
                         <button
                           onClick={() => pr.id !== undefined && supportPrayer(pr.id)}
                           className="btn btn-small btn-outline margin-top-1"
@@ -2883,6 +3819,17 @@ export default function App() {
                       <p style={{ color: 'var(--text-muted)' }}>No public prayer requests submitted yet. Be the first to share one!</p>
                     </div>
                   )}
+                </motion.div>
+                <motion.div className="card margin-top-3" variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+                  <h3 style={{ marginBottom: '0.45rem' }}>Prayer Care Pathway</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '0.8rem' }}>
+                    Every request follows a care journey: Received -&gt; Assigned -&gt; Contacted -&gt; Ongoing Support -&gt; Completed.
+                  </p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                    {Object.entries(FOLLOW_UP_STATUS_LABELS).map(([key, label]) => (
+                      <span key={key} className="badge" style={{ fontSize: '0.75rem' }}>{label}</span>
+                    ))}
+                  </div>
                 </motion.div>
               </div>
             </div>
@@ -3016,6 +3963,11 @@ export default function App() {
               <div className="container grid grid-2 gap-4">
                 <div className="card">
                   <h2 className="card-title text-gold">Online Tithes & Offerings</h2>
+                  {donationReceipt && (
+                    <div className="alert alert-success" style={{ marginTop: '0.75rem' }}>
+                      <strong>Transfer submitted:</strong> UGX {donationReceipt.amount.toLocaleString()} to {donationReceipt.fund}. Reference: {donationReceipt.reference}
+                    </div>
+                  )}
                   <form onSubmit={handleDonationSubmit} className="margin-top-2">
                     <div className="form-group">
                       <label>Amount (UGX / USD)</label>
@@ -3094,7 +4046,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div>
+                <div className="give-details-panel">
                   <h2 className="section-title">Giving Details</h2>
                   <p>Honoring the Lord with your substance is an act of worship. Here are the local bank and mobile accounts for Seattle International Church.</p>
                   
@@ -3111,6 +4063,14 @@ export default function App() {
                     <p><strong>Branch:</strong> Mukono Branch</p>
                     <p><strong>Account Number:</strong> 9030018945628</p>
                     <p><strong>Swift Code:</strong> SBICUGKAX</p>
+                  </div>
+
+                  <div className="payment-method-card card margin-top-2">
+                    <h3>Where Your Giving Goes</h3>
+                    <p><strong>40%</strong> Worship & Sabbath Programs</p>
+                    <p><strong>35%</strong> Student and Community Outreach</p>
+                    <p><strong>25%</strong> Missions, Care, and Church Development</p>
+                    <p className="text-muted">Monthly stewardship summaries are shared by church leadership for accountability.</p>
                   </div>
                 </div>
               </div>
@@ -3264,7 +4224,6 @@ export default function App() {
                   <p style={{ color: 'rgba(255,255,255,0.7)', marginTop: '0.5rem', marginBottom: '1.5rem' }}>Ministry leaders and elders can submit notices through the church office or admin portal.</p>
                   <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => setCurrentRoute('contact')} className="btn btn-accent btn-small">Contact Church Office</button>
-                    <button onClick={() => setCurrentRoute('admin')} className="btn btn-outline btn-small" style={{ borderColor: 'rgba(255,255,255,0.3)', color: '#fff' }}>Admin Portal</button>
                   </div>
                 </motion.div>
               </div>
@@ -3362,7 +4321,120 @@ export default function App() {
         {/* ================= TESTIMONIES ================= */}
         {currentRoute === 'testimonies' && (
           <motion.div key="testimonies" variants={pageTransition} initial="hidden" animate="visible" exit="exit">
-            <TestimoniesPage />
+            <div className="page-header">
+              <div className="container text-center">
+                <h1>Testimonies of Grace</h1>
+                <p>{CORE_MISSION_STATEMENT}</p>
+              </div>
+            </div>
+
+            <div className="section-padding">
+              <div className="container grid grid-2 gap-3">
+                <motion.div className="card" variants={fadeUp} initial="hidden" animate="visible">
+                  <h2 className="section-title">Share Your Testimony</h2>
+                  <p className="text-muted">Your story can strengthen someone else and guide them to prayer, growth, and service.</p>
+                  <form onSubmit={handleTestimonySubmit} className="margin-top-2">
+                    <div className="form-group">
+                      <label>Title</label>
+                      <input
+                        type="text"
+                        value={testimonyForm.title}
+                        onChange={(e) => setTestimonyForm({ ...testimonyForm, title: e.target.value })}
+                        required
+                        placeholder="A short title for your testimony"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Testimony Type</label>
+                      <select
+                        value={testimonyForm.testimony_type}
+                        onChange={(e) => setTestimonyForm({ ...testimonyForm, testimony_type: e.target.value as 'prayer_answered' | 'spiritual_growth' | 'community_support' | 'healing_restoration' | 'outreach_impact' })}
+                      >
+                        <option value="prayer_answered">Prayer Answered</option>
+                        <option value="spiritual_growth">Spiritual Growth</option>
+                        <option value="community_support">Community Support</option>
+                        <option value="healing_restoration">Healing and Restoration</option>
+                        <option value="outreach_impact">Outreach Impact</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Your Testimony</label>
+                      <textarea
+                        rows={6}
+                        value={testimonyForm.content}
+                        onChange={(e) => setTestimonyForm({ ...testimonyForm, content: e.target.value })}
+                        required
+                        placeholder="Share what God has done and how it shaped your faith journey."
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Suggested Next Step</label>
+                      <select
+                        value={testimonyForm.next_step}
+                        onChange={(e) => setTestimonyForm({ ...testimonyForm, next_step: e.target.value as 'none' | 'mentor' | 'growth_class' | 'prayer_team' | 'service_team' })}
+                      >
+                        <option value="none">No follow-up needed</option>
+                        <option value="mentor">Connect to Mentor</option>
+                        <option value="growth_class">Invite to Growth Class</option>
+                        <option value="prayer_team">Connect to Prayer Team</option>
+                        <option value="service_team">Connect to Service Team</option>
+                      </select>
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block">Submit Testimony</button>
+                  </form>
+                </motion.div>
+
+                <motion.div className="card" variants={fadeUp} initial="hidden" animate="visible">
+                  <h3 style={{ marginBottom: '0.45rem' }}>Testimony Ministry Workflow</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '0.8rem' }}>
+                    Submit -&gt; Review -&gt; Approve -&gt; Publish -&gt; Follow-up. This keeps testimonies pastoral, safe, and mission-driven.
+                  </p>
+                  <div style={{ display: 'grid', gap: '0.55rem' }}>
+                    <div className="badge">Prayer Answered</div>
+                    <div className="badge">Spiritual Growth</div>
+                    <div className="badge">Community Support</div>
+                    <div className="badge">Healing & Restoration</div>
+                    <div className="badge">Outreach Impact</div>
+                  </div>
+                  <div className="margin-top-2" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <button className="btn btn-outline btn-small" onClick={() => setCurrentRoute('prayer-requests')}>I Need Prayer</button>
+                    <button className="btn btn-outline btn-small" onClick={() => setCurrentRoute('bible-study')}>Join Growth Class</button>
+                    <button className="btn btn-outline btn-small" onClick={() => setCurrentRoute('community-outreach')}>Serve with Us</button>
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+
+            <div className="section-padding bg-light">
+              <div className="container">
+                <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+                  <h2 className="section-title text-center">Published Testimonies</h2>
+                  <p className="section-subtitle text-center">Stories that strengthen faith and call the church to deeper discipleship.</p>
+                </motion.div>
+                <motion.div className="grid grid-3 gap-3 margin-top-2" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+                  {testimonies.length === 0 ? (
+                    <div className="card text-center" style={{ gridColumn: '1 / -1' }}>
+                      <p style={{ marginBottom: '0.4rem', fontWeight: 600 }}>No testimonies are published yet.</p>
+                      <p style={{ margin: 0, color: 'var(--text-muted)' }}>Be the first to share what God has done.</p>
+                    </div>
+                  ) : (
+                    testimonies.map((item) => (
+                      <motion.div key={item.id} className="card" variants={staggerItem} whileHover={{ y: -4 }}>
+                        <p className="weekly-kicker">{TESTIMONY_TYPE_LABELS[item.testimony_type || 'spiritual_growth']}</p>
+                        <h3 style={{ marginBottom: '0.45rem' }}>{item.title}</h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.65rem' }}>
+                          {item.author_name || 'Anonymous'} • {new Date(item.created_at).toLocaleDateString()}
+                        </p>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '0.65rem' }}>
+                          {item.content.length > 220 ? `${item.content.slice(0, 220)}...` : item.content}
+                        </p>
+                        <span className="badge">Next step: {TESTIMONY_NEXT_STEP_LABELS[item.next_step || 'none']}</span>
+                      </motion.div>
+                    ))
+                  )}
+                </motion.div>
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -3547,7 +4619,23 @@ export default function App() {
         {/* ================= ADMIN VIEW ================= */}
         {currentRoute === 'admin' && (
           <motion.div key="admin" variants={pageTransition} initial="hidden" animate="visible" exit="exit">
-            {!isAdminAuthenticated ? (
+            {isAdminSessionChecking ? (
+              <>
+                <div className="page-header" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)' }}>
+                  <div className="container text-center">
+                    <h1 style={{ color: '#fff' }}>Admin Portal</h1>
+                    <p style={{ color: 'rgba(255,255,255,0.75)' }}>Verifying secure session...</p>
+                  </div>
+                </div>
+                <div className="section-padding">
+                  <div style={{ maxWidth: '440px', margin: '0 auto' }}>
+                    <div className="card" style={{ textAlign: 'center' }}>
+                      <p>Checking staff access with the backend...</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : !isAdminAuthenticated ? (
               /* ---- Admin Login Screen ---- */
               <>
                 <div className="page-header" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)' }}>
@@ -3630,6 +4718,7 @@ export default function App() {
                       { id: 'admin-events', label: '📅 Manage Events' },
                       { id: 'admin-sermons', label: '🎙️ Manage Sermons' },
                       { id: 'admin-announcements', label: '📣 Announcements' },
+                      { id: 'admin-audit', label: '🧾 Audit Trail' },
                       { id: 'admin-projects', label: '🏗️ Manage Projects' },
                       { id: 'admin-gallery', label: '📸 Manage Gallery' },
                       { id: 'admin-lessons', label: '🎬 Lesson Videos' },
@@ -4774,8 +5863,98 @@ export default function App() {
                                 </button>
                               </div>
                             ))}
+
                           </div>
                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Admin Audit Trail */}
+                  {activeAdminTab === 'admin-audit' && (
+                    <div className="admin-tab-content active">
+                      <div className="flex justify-between items-center">
+                        <h2>Admin Audit Trail</h2>
+                        <button
+                          onClick={() => fetchAdminAuditLogs()}
+                          className="btn btn-outline btn-small"
+                          disabled={adminAuditLoading}
+                        >
+                          {adminAuditLoading ? 'Refreshing...' : 'Refresh Logs'}
+                        </button>
+                      </div>
+                      <p className="text-muted">Track staff actions across managed resources for accountability and troubleshooting.</p>
+
+                      <div className="card margin-top-2" style={{ padding: '1rem' }}>
+                        <div className="grid grid-2 gap-2">
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label>Action Filter</label>
+                            <select
+                              value={adminAuditActionFilter}
+                              onChange={(e) => setAdminAuditActionFilter(e.target.value as AdminAuditActionFilter)}
+                            >
+                              <option value="all">All</option>
+                              <option value="create">Create</option>
+                              <option value="update">Update</option>
+                              <option value="delete">Delete</option>
+                            </select>
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label>Resource Type</label>
+                            <input
+                              type="text"
+                              value={adminAuditResourceFilter}
+                              onChange={(e) => setAdminAuditResourceFilter(e.target.value)}
+                              placeholder="e.g. Sermon, Project, HymnBook"
+                            />
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.8rem' }}>
+                          <button
+                            className="btn btn-accent btn-small"
+                            onClick={() => fetchAdminAuditLogs(adminAuditActionFilter, adminAuditResourceFilter)}
+                            disabled={adminAuditLoading}
+                          >
+                            Apply Filters
+                          </button>
+                        </div>
+                      </div>
+
+                      {adminAuditError && (
+                        <div className="alert-danger margin-top-1" style={{ marginBottom: '1rem', fontSize: '0.88rem' }}>
+                          {adminAuditError}
+                        </div>
+                      )}
+
+                      <div className="table-responsive margin-top-2">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Time</th>
+                              <th>Actor</th>
+                              <th>Action</th>
+                              <th>Resource</th>
+                              <th>Label</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {adminAuditLoading ? (
+                              <tr><td colSpan={5} className="text-center">Loading audit logs...</td></tr>
+                            ) : adminAuditEntries.length === 0 ? (
+                              <tr><td colSpan={5} className="text-center">No audit entries found for current filters.</td></tr>
+                            ) : (
+                              adminAuditEntries.map((entry) => (
+                                <tr key={entry.id}>
+                                  <td>{new Date(entry.created_at).toLocaleString()}</td>
+                                  <td>{entry.actor_username || 'System'}</td>
+                                  <td><span className="badge">{entry.action.toUpperCase()}</span></td>
+                                  <td>{entry.resource_type} #{entry.resource_id || '-'}</td>
+                                  <td>{entry.resource_label || '-'}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}

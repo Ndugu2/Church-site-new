@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { API_BASE_URL } from '../config';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -25,7 +26,7 @@ export const StaffDirectory: React.FC = () => {
   useEffect(() => {
     const fetchStaff = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:8000/api/staff/');
+        const response = await fetch(`${API_BASE_URL}/staff/`);
         const data = await response.json();
         setStaff(data.results || data);
       } catch (error) {
@@ -77,6 +78,11 @@ export const StaffDirectory: React.FC = () => {
         {/* Staff Grid */}
         {loading ? (
           <p>Loading staff directory...</p>
+        ) : filtered.length === 0 ? (
+          <div style={{ background: '#f7f9fc', borderRadius: '10px', padding: '1.5rem', color: '#475569' }}>
+            <p style={{ margin: 0, fontWeight: 600 }}>No staff records available yet.</p>
+            <p style={{ margin: '0.45rem 0 0' }}>Add staff profiles from the admin panel to populate this page.</p>
+          </div>
         ) : (
           <div style={{
             display: 'grid',

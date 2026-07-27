@@ -4,7 +4,8 @@ from .models import (
     Sermon, Event, PrayerRequest, BibleStudy, Donation, Project, LessonVideo,
     MemberProfile, BlogPost, Testimony, ForumCategory, ForumThread, ForumPost,
     StaffMember, PageView, EngagementMetric, Payment, Notification, 
-    EventAttendance, PrayerSupport, HymnBook, Hymn, SabbathProgramme, ProjectUpdateLog
+    EventAttendance, PrayerSupport, HymnBook, Hymn, SabbathProgramme, ProjectUpdateLog,
+    AdminAuditLog
 )
 
 class SermonSerializer(serializers.ModelSerializer):
@@ -57,6 +58,14 @@ class ProjectUpdateLogSerializer(serializers.ModelSerializer):
         model = ProjectUpdateLog
         fields = '__all__'
 
+
+class AdminAuditLogSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source='actor.username', read_only=True)
+
+    class Meta:
+        model = AdminAuditLog
+        fields = '__all__'
+
 class LessonVideoSerializer(serializers.ModelSerializer):
     class Meta:
         model = LessonVideo
@@ -79,6 +88,23 @@ class MemberProfileSerializer(serializers.ModelSerializer):
 
 class BlogPostSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source='author.get_full_name', read_only=True)
+
+    def validate(self, attrs):
+        category = attrs.get('category', getattr(self.instance, 'category', None))
+        cta_text = attrs.get('cta_text', getattr(self.instance, 'cta_text', ''))
+        cta_link = attrs.get('cta_link', getattr(self.instance, 'cta_link', ''))
+        expires_at = attrs.get('expires_at', getattr(self.instance, 'expires_at', None))
+        scheduled_publish = attrs.get('scheduled_publish', getattr(self.instance, 'scheduled_publish', None))
+
+        if category == 'announcement':
+            # Keep legacy frontend behavior: if one CTA field is present, require the other.
+            if bool(cta_text) != bool(cta_link):
+                raise serializers.ValidationError('Both cta_text and cta_link are required when either is provided.')
+
+            if expires_at and scheduled_publish and expires_at <= scheduled_publish:
+                raise serializers.ValidationError('expires_at must be later than scheduled_publish.')
+
+        return attrs
     
     class Meta:
         model = BlogPost
@@ -108,6 +134,7 @@ class ForumPostSerializer(serializers.ModelSerializer):
     class Meta:
         model = ForumPost
         fields = '__all__'
+        read_only_fields = ['author', 'author_name', 'created_at', 'updated_at', 'likes']
 
 class ForumThreadSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source='author.user.get_full_name', read_only=True)
@@ -117,6 +144,7 @@ class ForumThreadSerializer(serializers.ModelSerializer):
     class Meta:
         model = ForumThread
         fields = '__all__'
+        read_only_fields = ['author', 'author_name', 'created_at', 'updated_at', 'posts', 'post_count']
     
     def get_post_count(self, obj):
         return obj.posts.count()

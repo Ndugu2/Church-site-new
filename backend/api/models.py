@@ -33,6 +33,21 @@ class PrayerRequest(models.Model):
     name = models.CharField(max_length=255, blank=True, default="Anonymous")
     content = models.TextField()
     confidential = models.BooleanField(default=False)
+    follow_up_status = models.CharField(max_length=30, choices=[
+        ('received', 'Received'),
+        ('assigned', 'Assigned to Prayer Team'),
+        ('contacted', 'Contacted'),
+        ('ongoing', 'Ongoing Prayer Support'),
+        ('completed', 'Follow-up Completed'),
+    ], default='received')
+    care_request_type = models.CharField(max_length=50, choices=[
+        ('none', 'No Additional Care Needed'),
+        ('pastoral_call', 'Pastoral Call'),
+        ('elder_visit', 'Elder Visit'),
+        ('counseling', 'Counseling Support'),
+        ('prayer_partner', 'Prayer Partner'),
+    ], default='none')
+    follow_up_notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -133,6 +148,27 @@ class MemberProfile(models.Model):
 
 class BlogPost(models.Model):
     """Blog/News posts"""
+    PRIORITY_CHOICES = [
+        ('high', 'High'),
+        ('normal', 'Normal'),
+        ('low', 'Low'),
+    ]
+    AUDIENCE_CHOICES = [
+        ('all_church', 'All Church'),
+        ('youth', 'Youth'),
+        ('leaders', 'Leaders'),
+        ('new_members', 'New Members'),
+        ('ministry_team', 'Ministry Team'),
+    ]
+    MISSION_TAG_CHOICES = [
+        ('prayer', 'Prayer'),
+        ('strengthening', 'Strengthening'),
+        ('growth', 'Growth'),
+        ('service', 'Service'),
+        ('worship', 'Worship'),
+        ('administration', 'Administration'),
+    ]
+
     title = models.CharField(max_length=255)
     slug = models.SlugField(unique=True)
     author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
@@ -149,6 +185,13 @@ class BlogPost(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     scheduled_publish = models.DateTimeField(null=True, blank=True)
     is_published = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='normal')
+    audience = models.CharField(max_length=30, choices=AUDIENCE_CHOICES, default='all_church')
+    action_required = models.BooleanField(default=False)
+    cta_text = models.CharField(max_length=120, blank=True)
+    cta_link = models.URLField(blank=True)
+    mission_tag = models.CharField(max_length=30, choices=MISSION_TAG_CHOICES, default='administration')
     views = models.IntegerField(default=0)
 
     class Meta:
@@ -162,8 +205,22 @@ class Testimony(models.Model):
     """Member testimonies/faith stories"""
     author = models.ForeignKey(MemberProfile, on_delete=models.CASCADE, related_name='testimonies')
     title = models.CharField(max_length=255)
+    testimony_type = models.CharField(max_length=50, choices=[
+        ('prayer_answered', 'Prayer Answered'),
+        ('spiritual_growth', 'Spiritual Growth'),
+        ('community_support', 'Community Support'),
+        ('healing_restoration', 'Healing and Restoration'),
+        ('outreach_impact', 'Outreach Impact'),
+    ], default='spiritual_growth')
     content = models.TextField()
     image = models.URLField(blank=True)
+    next_step = models.CharField(max_length=50, choices=[
+        ('none', 'No Follow-up Needed'),
+        ('mentor', 'Connect to Mentor'),
+        ('growth_class', 'Invite to Growth Class'),
+        ('prayer_team', 'Connect to Prayer Team'),
+        ('service_team', 'Connect to Service Team'),
+    ], default='none')
     created_at = models.DateTimeField(auto_now_add=True)
     is_featured = models.BooleanField(default=False)
     is_approved = models.BooleanField(default=False)
@@ -403,3 +460,26 @@ class SabbathProgramme(models.Model):
 
     def __str__(self):
         return f"{self.service_date}: {self.theme}"
+
+
+class AdminAuditLog(models.Model):
+    """Generic audit trail for admin/staff write actions across resources."""
+    ACTION_CHOICES = [
+        ('create', 'Create'),
+        ('update', 'Update'),
+        ('delete', 'Delete'),
+    ]
+
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='admin_audit_logs')
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    resource_type = models.CharField(max_length=120)
+    resource_id = models.CharField(max_length=50, blank=True)
+    resource_label = models.CharField(max_length=255, blank=True)
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.action} {self.resource_type} by {self.actor_id or 'system'}"

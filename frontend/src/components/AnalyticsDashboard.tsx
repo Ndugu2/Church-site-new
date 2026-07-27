@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BarChart, Users, TrendingUp, PieChart } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -22,7 +23,7 @@ export const AnalyticsDashboard: React.FC = () => {
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:8000/api/analytics/dashboard/', {
+        const response = await fetch(`${API_BASE_URL}/analytics/dashboard/`, {
           headers: {
             'Authorization': `Token ${localStorage.getItem('user_token')}`
           }

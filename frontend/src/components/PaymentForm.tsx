@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { API_BASE_URL } from '../config';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -26,7 +27,7 @@ export const PaymentForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess })
     setLoading(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/payments/create_payment/', {
+      const response = await fetch(`${API_BASE_URL}/payments/create_payment/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
