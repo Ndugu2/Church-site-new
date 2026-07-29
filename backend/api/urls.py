@@ -11,6 +11,7 @@ from .views import (
     LoginView,
     RegisterView,
     AdminSessionView,
+    AdminUserManagementView,
     MemberProfileViewSet,
     BlogPostViewSet,
     TestimonyViewSet,
@@ -54,6 +55,7 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='api-login'),
     path('register/', RegisterView.as_view(), name='api-register'),
     path('admin/session/', AdminSessionView.as_view(), name='api-admin-session'),
+    path('admin/users/', AdminUserManagementView.as_view(), name='api-admin-users'),
     path('', include(router.urls)),
 ]
 

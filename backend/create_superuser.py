@@ -35,5 +35,13 @@ if not User.objects.filter(username=ADMIN_USERNAME).exists():
     print(f"   Password: {ADMIN_PASSWORD}")
     print(f"   Admin URL: http://127.0.0.1:8000/admin/")
 else:
-    print(f"Superuser '{ADMIN_USERNAME}' already exists.")
+    user = User.objects.get(username=ADMIN_USERNAME)
+    user.email = ADMIN_EMAIL
+    user.is_staff = True
+    user.is_superuser = True
+    user.set_password(ADMIN_PASSWORD)
+    user.save(update_fields=['email', 'is_staff', 'is_superuser', 'password'])
+    print(f"Superuser '{ADMIN_USERNAME}' already exists; credentials were refreshed.")
+    print(f"   Username: {ADMIN_USERNAME}")
+    print(f"   Password: {ADMIN_PASSWORD}")
     print(f"   Admin URL: http://127.0.0.1:8000/admin/")

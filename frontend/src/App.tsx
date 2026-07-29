@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { Toaster, toast } from 'react-hot-toast';
-import { Users, GraduationCap, Music, Map as MapIcon, Heart, HandHelping, LogOut, User, BookOpen, Calendar, MessageSquare, Award, Search, X, ChevronDown } from 'lucide-react';
+import { Users, GraduationCap, Music, Map as MapIcon, Heart, HandHelping, LogOut, User, BookOpen, Calendar, MessageSquare, Award, Search, X, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { API_BASE_URL } from './config';
 
 // Import new components
@@ -218,6 +218,7 @@ interface Announcement {
   title: string;
   body: string;
   date: string;
+  scheduled_publish?: string;
   priority: 'high' | 'normal' | 'low';
   icon: string;
   slug?: string;
@@ -228,6 +229,70 @@ interface EventRegistrationReceipt {
   eventTitle: string;
   reference: string;
 }
+
+type SabbathProgrammeScope = 'none' | 'full' | 'sabbath_school_only';
+
+type AdminTabId =
+  | 'admin-stats'
+  | 'admin-accounts'
+  | 'admin-studies'
+  | 'admin-prayers'
+  | 'admin-donations'
+  | 'admin-events'
+  | 'admin-sermons'
+  | 'admin-announcements'
+  | 'admin-audit'
+  | 'admin-projects'
+  | 'admin-gallery'
+  | 'admin-lessons'
+  | 'admin-sabbath-programme';
+
+type AdminTabMeta = { id: AdminTabId; label: string };
+
+const ADMIN_TABS: AdminTabMeta[] = [
+  { id: 'admin-stats', label: '📊 Dashboard Stats' },
+  { id: 'admin-accounts', label: '👤 Registration Accounts' },
+  { id: 'admin-studies', label: '📖 Bible Studies' },
+  { id: 'admin-prayers', label: '🙏 Prayer Requests' },
+  { id: 'admin-donations', label: '💰 Donations' },
+  { id: 'admin-events', label: '📅 Manage Events' },
+  { id: 'admin-sermons', label: '🎙️ Manage Sermons' },
+  { id: 'admin-announcements', label: '📣 Announcements' },
+  { id: 'admin-audit', label: '🧾 Audit Trail' },
+  { id: 'admin-projects', label: '🏗️ Manage Projects' },
+  { id: 'admin-gallery', label: '📸 Manage Gallery' },
+  { id: 'admin-lessons', label: '🎬 Lesson Videos' },
+  { id: 'admin-sabbath-programme', label: '🗓️ Sabbath Programme' },
+];
+
+const ACCESS_RIGHT_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: 'announcements', label: 'Announcements' },
+  { id: 'bible_studies', label: 'Bible Study' },
+  { id: 'sabbath_programme', label: 'Sabbath Programme' },
+  { id: 'prayers', label: 'Prayer Requests' },
+  { id: 'donations', label: 'Donations' },
+  { id: 'events', label: 'Manage Events' },
+  { id: 'sermons', label: 'Manage Sermons' },
+  { id: 'audit', label: 'Audit Trail' },
+  { id: 'projects', label: 'Manage Projects' },
+  { id: 'gallery', label: 'Manage Gallery' },
+  { id: 'lessons', label: 'Lesson Videos' },
+];
+
+const ACCESS_RIGHT_LABELS: Record<string, string> = {
+  account_registration: 'Registration Accounts',
+  announcements: 'Announcements',
+  bible_studies: 'Bible Study',
+  sabbath_programme: 'Sabbath Programme',
+  prayers: 'Prayer Requests',
+  donations: 'Donations',
+  events: 'Manage Events',
+  sermons: 'Manage Sermons',
+  audit: 'Audit Trail',
+  projects: 'Manage Projects',
+  gallery: 'Manage Gallery',
+  lessons: 'Lesson Videos',
+};
 
 type SabbathProgrammeForm = {
   date: string;
@@ -249,27 +314,6 @@ type SabbathProgrammeForm = {
   afternoonTime: string;
   afternoonLeader: string;
 };
-
-const toSabbathProgrammeForm = (programme: SabbathProgram): SabbathProgrammeForm => ({
-  date: programme.date,
-  theme: programme.theme,
-  sabbathSchoolTime: programme.sabbathSchool.time,
-  superintendent: programme.sabbathSchool.superintendent,
-  lessonTitle: programme.sabbathSchool.lessonTitle,
-  lessonNumber: programme.sabbathSchool.lessonNumber,
-  divineServiceTime: programme.divineService.time,
-  songLeader: programme.divineService.songLeader,
-  openingPrayer: programme.divineService.openingPrayer,
-  sermonPreacher: programme.sermon.preacher,
-  sermonTitle: programme.sermon.title,
-  sermonKeyText: programme.sermon.keyText,
-  sermonSynopsis: programme.sermon.synopsis,
-  sermonRole: programme.sermon.role,
-  closingPrayer: programme.closingPrayer,
-  benediction: programme.benediction,
-  afternoonTime: programme.afternoonProgramme.time,
-  afternoonLeader: programme.afternoonProgramme.leader,
-});
 
 const applySabbathProgrammeForm = (base: SabbathProgram, form: SabbathProgrammeForm): SabbathProgram => ({
   ...base,
@@ -303,6 +347,27 @@ const applySabbathProgrammeForm = (base: SabbathProgram, form: SabbathProgrammeF
     time: form.afternoonTime,
     leader: form.afternoonLeader,
   },
+});
+
+const toSabbathProgrammeForm = (programme: SabbathProgram): SabbathProgrammeForm => ({
+  date: programme.date,
+  theme: programme.theme,
+  sabbathSchoolTime: programme.sabbathSchool.time,
+  superintendent: programme.sabbathSchool.superintendent,
+  lessonTitle: programme.sabbathSchool.lessonTitle,
+  lessonNumber: programme.sabbathSchool.lessonNumber,
+  divineServiceTime: programme.divineService.time,
+  songLeader: programme.divineService.songLeader,
+  openingPrayer: programme.divineService.openingPrayer,
+  sermonPreacher: programme.sermon.preacher,
+  sermonTitle: programme.sermon.title,
+  sermonKeyText: programme.sermon.keyText,
+  sermonSynopsis: programme.sermon.synopsis,
+  sermonRole: programme.sermon.role,
+  closingPrayer: programme.closingPrayer,
+  benediction: programme.benediction,
+  afternoonTime: programme.afternoonProgramme.time,
+  afternoonLeader: programme.afternoonProgramme.leader,
 });
 
 // --- Initial Fallback Mock Data ---
@@ -533,8 +598,48 @@ const LESSON_VIDEOS = [
   { week: 4, title: "Week 4: Judgment and the Most Holy Place", date: "2026-07-25", youtubeId: "dQw4w9WgXcQ", desc: "Understanding the Day of Atonement, the cleansing of the sanctuary, and the work of our High Priest." },
 ];
 
+const IS_ADMIN_ENTRY = typeof window !== 'undefined' && /\/admin\.html$/i.test(window.location.pathname);
+
+const PUBLIC_ROUTE_WHITELIST = new Set([
+  'home',
+  'about',
+  'sermons',
+  'sabbath-programme',
+  'hymns',
+  'watch-live',
+  'prayer-requests',
+  'testimonies',
+  'bible-study',
+  'forums',
+  'blog',
+  'dashboard',
+  'events',
+  'ministries',
+  'community-outreach',
+  'projects',
+  'gallery',
+  'announcements',
+  'go-back-to-school',
+  'contact',
+  'staff',
+  'give',
+  'youth-ministry',
+  'campus-ministry',
+  'music-ministry',
+  'pathfinders-ministry',
+  'women-ministry',
+  'prayer-ministry',
+  'analytics',
+]);
+
+const ADMIN_ROUTE_WHITELIST = new Set([
+  'admin',
+]);
+
+const ROUTE_WHITELIST = IS_ADMIN_ENTRY ? ADMIN_ROUTE_WHITELIST : PUBLIC_ROUTE_WHITELIST;
+
 export default function App() {
-  const [currentRoute, setCurrentRoute] = useState('home');
+  const [currentRoute, setCurrentRoute] = useState(IS_ADMIN_ENTRY ? 'admin' : 'home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileMenuSearch, setMobileMenuSearch] = useState('');
@@ -708,6 +813,16 @@ export default function App() {
   const [registeringEvent, setRegisteringEvent] = useState<ChurchEvent | null>(null);
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [showAddSermonModal, setShowAddSermonModal] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<number | null>(null);
+  const [editingSermonId, setEditingSermonId] = useState<number | null>(null);
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState<number | null>(null);
+  const [editingLessonId, setEditingLessonId] = useState<number | null>(null);
+  const [editingStudyId, setEditingStudyId] = useState<number | null>(null);
+  const [editingPrayerId, setEditingPrayerId] = useState<number | null>(null);
+  const [editingDonationId, setEditingDonationId] = useState<number | null>(null);
+  const [studyDrafts, setStudyDrafts] = useState<Record<number, BibleStudy>>({});
+  const [prayerDrafts, setPrayerDrafts] = useState<Record<number, PrayerRequest>>({});
+  const [donationDrafts, setDonationDrafts] = useState<Record<number, Donation>>({});
 
   // Form input states
   const [addEventForm, setAddEventForm] = useState({ title: '', date: '', location: '', desc: '' });
@@ -789,12 +904,62 @@ export default function App() {
   );
 
   // Admin Panel states
-  const [activeAdminTab, setActiveAdminTab] = useState('admin-stats');
+  const [activeAdminTab, setActiveAdminTab] = useState<AdminTabId>('admin-stats');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(localStorage.getItem('admin_authenticated') === 'true');
   const [isAdminSessionChecking, setIsAdminSessionChecking] = useState(false);
+  const [allowedAdminTabs, setAllowedAdminTabs] = useState<AdminTabId[]>(() => {
+    try {
+      const raw = localStorage.getItem('admin_tabs');
+      if (!raw) {
+        return ADMIN_TABS.map((tab) => tab.id);
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        return ADMIN_TABS.map((tab) => tab.id);
+      }
+      const known = new Set(ADMIN_TABS.map((tab) => tab.id));
+      return parsed.filter((tab: string): tab is AdminTabId => known.has(tab as AdminTabId));
+    } catch {
+      return ADMIN_TABS.map((tab) => tab.id);
+    }
+  });
+  const [sabbathProgrammeScope, setSabbathProgrammeScope] = useState<SabbathProgrammeScope>(() => {
+    const value = localStorage.getItem('sabbath_programme_scope');
+    if (value === 'sabbath_school_only' || value === 'none') {
+      return value;
+    }
+    return 'full';
+  });
   const [adminLoginForm, setAdminLoginForm] = useState({ username: '', password: '' });
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [adminLoginError, setAdminLoginError] = useState('');
   const [adminLoginLoading, setAdminLoginLoading] = useState(false);
+  const [adminAccounts, setAdminAccounts] = useState<Array<{ id: number; username: string; email: string; full_name?: string; is_active?: boolean; is_superuser: boolean; department_roles: string[]; sections: string[]; sabbath_programme_scope?: SabbathProgrammeScope }>>([]);
+  const [adminAccountsLoading, setAdminAccountsLoading] = useState(false);
+  const [adminAccountsError, setAdminAccountsError] = useState('');
+  const [creatingAdminAccount, setCreatingAdminAccount] = useState(false);
+  const [updatingAdminAccount, setUpdatingAdminAccount] = useState(false);
+  const [editingAdminAccountId, setEditingAdminAccountId] = useState<number | null>(null);
+  const [accountFreezeModal, setAccountFreezeModal] = useState<null | { id: number; username: string; nextState: boolean }>(null);
+  const [accountPasswordModal, setAccountPasswordModal] = useState<null | { id: number; username: string }>(null);
+  const [accountPasswordForm, setAccountPasswordForm] = useState({ password: '', confirmPassword: '' });
+  const [accountPasswordSubmitting, setAccountPasswordSubmitting] = useState(false);
+  const [adminAccountEditForm, setAdminAccountEditForm] = useState({
+    full_name: '',
+    username: '',
+    email: '',
+    access_sections: ['bible_studies'] as string[],
+    sabbath_programme_scope: 'full' as SabbathProgrammeScope,
+  });
+  const [adminAccountForm, setAdminAccountForm] = useState({
+    full_name: '',
+    username: '',
+    email: '',
+    password: '',
+    department_role: '',
+    access_sections: ['bible_studies'],
+    sabbath_programme_scope: 'full' as SabbathProgrammeScope,
+  });
 
   // Announcements
   const [announcements, setAnnouncements] = useState<Announcement[]>([
@@ -816,14 +981,61 @@ export default function App() {
   const getRouteFromHash = (): string | null => {
     const raw = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
     if (!raw) return null;
-    return raw;
+    return ROUTE_WHITELIST.has(raw) ? raw : null;
   };
 
   useEffect(() => {
-    const hashRoute = getRouteFromHash();
-    if (hashRoute === 'admin') {
+    const syncRouteFromHash = () => {
+      if (IS_ADMIN_ENTRY) {
+        setCurrentRoute((prev) => (prev === 'admin' ? prev : 'admin'));
+        if (window.location.hash.replace(/^#\/?/, '').trim().toLowerCase() !== 'admin') {
+          window.history.replaceState(null, '', '#/admin');
+        }
+        return;
+      }
+
+      const hashRoute = getRouteFromHash();
+      if (!hashRoute) return;
+      setCurrentRoute((prev) => (prev === hashRoute ? prev : hashRoute));
+    };
+
+    syncRouteFromHash();
+    window.addEventListener('hashchange', syncRouteFromHash);
+    return () => window.removeEventListener('hashchange', syncRouteFromHash);
+  }, []);
+
+  useEffect(() => {
+    if (IS_ADMIN_ENTRY && currentRoute !== 'admin') {
       setCurrentRoute('admin');
+      return;
     }
+
+    const currentHash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
+    if (currentHash !== currentRoute) {
+      window.history.replaceState(null, '', `#/${currentRoute}`);
+    }
+  }, [currentRoute]);
+
+  useEffect(() => {
+    if (IS_ADMIN_ENTRY) {
+      if (window.location.hash.replace(/^#\/?/, '').trim().toLowerCase() !== 'admin') {
+        window.history.replaceState(null, '', '#/admin');
+      }
+      return;
+    }
+
+    const rawHash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
+    if (rawHash === 'admin') {
+      window.location.assign('/admin.html#/admin');
+      return;
+    }
+
+    if (window.location.hash && !getRouteFromHash()) {
+      window.history.replaceState(null, '', '#/home');
+      if (currentRoute !== 'home') {
+        setCurrentRoute('home');
+      }
+    };
   }, []);
 
   // --- API Sync on Load ---
@@ -872,6 +1084,30 @@ export default function App() {
       localStorage.removeItem('admin_username');
     }
   }, [isAdminAuthenticated]);
+
+  useEffect(() => {
+    const syncAdminStateAcrossEntries = (event: StorageEvent) => {
+      if (event.key === 'admin_authenticated') {
+        setIsAdminAuthenticated(event.newValue === 'true');
+      }
+      if (event.key === 'admin_token' && !event.newValue) {
+        setIsAdminAuthenticated(false);
+      }
+      if (event.key === 'user_token' && !event.newValue) {
+        setIsLoggedIn(false);
+        setUserEmail('');
+      }
+      if (event.key === 'user_token' && event.newValue) {
+        setIsLoggedIn(true);
+      }
+      if (event.key === 'user_email') {
+        setUserEmail(event.newValue || '');
+      }
+    };
+
+    window.addEventListener('storage', syncAdminStateAcrossEntries);
+    return () => window.removeEventListener('storage', syncAdminStateAcrossEntries);
+  }, []);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -1065,6 +1301,38 @@ export default function App() {
     desc: normalizeEditorialText(item.desc),
   });
 
+  const openEventEditor = (item: ChurchEvent) => {
+    setEditingEventId(item.id);
+    setAddEventForm({ title: item.title, date: item.date, location: item.location, desc: item.desc });
+    setShowAddEventModal(true);
+  };
+
+  const openSermonEditor = (item: Sermon) => {
+    setEditingSermonId(item.id);
+    setAddSermonForm({ title: item.title, speaker: item.speaker, date: item.date, passage: item.passage, category: item.category });
+    setShowAddSermonModal(true);
+  };
+
+  const openAnnouncementEditor = (item: Announcement) => {
+    setEditingAnnouncementId(item.id);
+    setAddAnnouncementForm({
+      title: item.title,
+      body: item.body,
+      date: item.scheduled_publish || item.date,
+      priority: item.priority,
+      icon: item.icon,
+      is_published: item.is_published !== false,
+    });
+    setActiveAdminTab('admin-announcements');
+  };
+
+  const openLessonEditor = (item: { id?: number; week: number; title: string; date: string; youtubeId: string; desc: string }) => {
+    if (!item.id) return;
+    setEditingLessonId(item.id);
+    setAddLessonForm({ week: String(item.week), title: item.title, date: item.date, youtube_id: item.youtubeId, desc: item.desc });
+    setActiveAdminTab('admin-lessons');
+  };
+
   const fetchSermons = async () => {
     try {
       const res = await fetch(`${API_URL}/sermons/`);
@@ -1173,7 +1441,8 @@ export default function App() {
       id: item.id,
       title: item.title,
       body: item.content,
-      date: item.created_at ? String(item.created_at).slice(0, 10) : '',
+      date: item.scheduled_publish ? String(item.scheduled_publish).slice(0, 10) : (item.created_at ? String(item.created_at).slice(0, 10) : ''),
+      scheduled_publish: item.scheduled_publish ? String(item.scheduled_publish).slice(0, 10) : '',
       priority: (item.priority as 'high' | 'normal' | 'low') || priorityFromCategory,
       icon: item.featured_image || '📣',
       slug: item.slug,
@@ -1238,6 +1507,195 @@ export default function App() {
       setAdminAuditError('Unable to fetch audit trail data from backend.');
     } finally {
       setAdminAuditLoading(false);
+    }
+  };
+
+  const fetchAdminAccounts = async () => {
+    setAdminAccountsLoading(true);
+    setAdminAccountsError('');
+    try {
+      const res = await fetch(`${API_URL}/admin/users/`, {
+        headers: getAdminAuthHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setAdminAccounts(list);
+    } catch {
+      setAdminAccountsError('Unable to load registration accounts.');
+    } finally {
+      setAdminAccountsLoading(false);
+    }
+  };
+
+  const handleCreateAdminAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { username, email, password, access_sections } = adminAccountForm;
+    if (!username.trim() || !email.trim() || !password.trim()) {
+      toast.error('Please complete all required account fields.');
+      return;
+    }
+    if (!Array.isArray(access_sections) || access_sections.length === 0) {
+      toast.error('Select at least one data access right.');
+      return;
+    }
+
+    setCreatingAdminAccount(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/users/`, {
+        method: 'POST',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify(adminAccountForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Could not create account.');
+        return;
+      }
+      setAdminAccountForm({
+        full_name: '',
+        username: '',
+        email: '',
+        password: '',
+        department_role: '',
+        access_sections: ['bible_studies'],
+        sabbath_programme_scope: 'full',
+      });
+      await fetchAdminAccounts();
+      triggerLog(`Registration account created: ${data?.username || username}`);
+      toast.success('Department account created successfully.');
+    } catch {
+      toast.error('Could not create account.');
+    } finally {
+      setCreatingAdminAccount(false);
+    }
+  };
+
+  const openEditAdminAccount = (account: { id: number; full_name?: string; username: string; email: string; sections: string[]; sabbath_programme_scope?: SabbathProgrammeScope; is_superuser: boolean }) => {
+    setEditingAdminAccountId(account.id);
+    setAdminAccountEditForm({
+      full_name: account.full_name || '',
+      username: account.username,
+      email: account.email,
+      access_sections: account.sections.length > 0 ? account.sections : ['bible_studies'],
+      sabbath_programme_scope: account.sabbath_programme_scope || 'full',
+    });
+  };
+
+  const cancelEditAdminAccount = () => {
+    setEditingAdminAccountId(null);
+  };
+
+  const handleUpdateAdminAccount = async (accountId: number) => {
+    if (!adminAccountEditForm.username.trim() || !adminAccountEditForm.email.trim()) {
+      toast.error('Username and email are required.');
+      return;
+    }
+    if (adminAccountEditForm.access_sections.length === 0) {
+      toast.error('Select at least one data access right.');
+      return;
+    }
+
+    setUpdatingAdminAccount(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/users/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({
+          id: accountId,
+          ...adminAccountEditForm,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Could not update account.');
+        return;
+      }
+      await fetchAdminAccounts();
+      setEditingAdminAccountId(null);
+      triggerLog(`Account updated: ${data?.username || accountId}`);
+      toast.success('Account updated successfully.');
+    } catch {
+      toast.error('Could not update account.');
+    } finally {
+      setUpdatingAdminAccount(false);
+    }
+  };
+
+  const handleToggleFreezeAccount = async (account: { id: number; username: string; is_active?: boolean; is_superuser: boolean }) => {
+    const nextState = !(account.is_active !== false);
+    setAccountFreezeModal({ id: account.id, username: account.username, nextState });
+  };
+
+  const confirmToggleFreezeAccount = async () => {
+    if (!accountFreezeModal) {
+      return;
+    }
+
+    const { id, username, nextState } = accountFreezeModal;
+
+    try {
+      const res = await fetch(`${API_URL}/admin/users/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ id, is_active: nextState }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Could not update account status.');
+        return;
+      }
+      await fetchAdminAccounts();
+      triggerLog(`Account ${nextState ? 'unfrozen' : 'frozen'}: ${username}`);
+      toast.success(`Account ${nextState ? 'unfrozen' : 'frozen'} successfully.`);
+      setAccountFreezeModal(null);
+    } catch {
+      toast.error('Could not update account status.');
+    }
+  };
+
+  const handleResetAccountPassword = async (account: { id: number; username: string; is_superuser: boolean }) => {
+    setAccountPasswordModal({ id: account.id, username: account.username });
+    setAccountPasswordForm({ password: '', confirmPassword: '' });
+  };
+
+  const confirmResetAccountPassword = async () => {
+    if (!accountPasswordModal) {
+      return;
+    }
+
+    const nextPassword = accountPasswordForm.password.trim();
+    if (nextPassword.length < 8) {
+      toast.error('Password must be at least 8 characters.');
+      return;
+    }
+    if (nextPassword !== accountPasswordForm.confirmPassword.trim()) {
+      toast.error('Password confirmation does not match.');
+      return;
+    }
+
+    setAccountPasswordSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/users/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ id: accountPasswordModal.id, new_password: nextPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || 'Could not reset password.');
+        return;
+      }
+      triggerLog(`Password reset for account: ${accountPasswordModal.username}`);
+      toast.success('Password reset successfully.');
+      setAccountPasswordModal(null);
+      setAccountPasswordForm({ password: '', confirmPassword: '' });
+    } catch {
+      toast.error('Could not reset password.');
+    } finally {
+      setAccountPasswordSubmitting(false);
     }
   };
 
@@ -1372,43 +1830,6 @@ export default function App() {
     } catch {
       // Fallback to LESSON_VIDEOS constant
     }
-  };
-
-  const handleAdminAddLessonVideo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const { week, title, date, youtube_id, desc } = addLessonForm;
-    if (!week || !title || !date || !youtube_id || !desc) {
-      toast.error('Please fill in all fields.');
-      return;
-    }
-
-    // Extract YouTube ID if full URL was pasted
-    let ytId = youtube_id.trim();
-    const ytMatch = ytId.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-    if (ytMatch) ytId = ytMatch[1];
-
-    try {
-      const res = await fetch(`${API_URL}/lessons/`, {
-        method: 'POST',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ week: parseInt(week), title, date, youtube_id: ytId, desc }),
-      });
-      if (res.ok) {
-        fetchLessonVideos();
-        toast.success(`Week ${week} lesson video added!`);
-      } else {
-        const err = await res.json();
-        toast.error(err.week?.[0] || 'Error saving lesson video.');
-        return;
-      }
-    } catch {
-      // Offline fallback: add locally
-      const newVideo = { week: parseInt(week), title, date, youtubeId: ytId, desc, id: Date.now() };
-      setLessonVideos(prev => [...prev, newVideo].sort((a, b) => a.week - b.week));
-      toast.success(`Week ${week} lesson video added (offline mode).`);
-    }
-    setAddLessonForm({ week: '', title: '', date: '', youtube_id: '', desc: '' });
-    triggerLog(`Lesson Week ${week} video uploaded: "${title}"`);
   };
 
   const handleAdminDeleteLessonVideo = async (id: number, week: number) => {
@@ -1640,8 +2061,9 @@ export default function App() {
     e.preventDefault();
     const { title, date, location, desc } = addEventForm;
     try {
-      const res = await fetch(`${API_URL}/events/`, {
-        method: 'POST',
+      const url = editingEventId ? `${API_URL}/events/${editingEventId}/` : `${API_URL}/events/`;
+      const res = await fetch(url, {
+        method: editingEventId ? 'PATCH' : 'POST',
         headers: getAdminAuthHeaders(),
         body: JSON.stringify({ title, date, location, desc })
       });
@@ -1657,6 +2079,7 @@ export default function App() {
     triggerLog(`Event "${title}" added to calendar.`);
     toast.success("Event added successfully!");
     setAddEventForm({ title: '', date: '', location: '', desc: '' });
+    setEditingEventId(null);
     setShowAddEventModal(false);
   };
 
@@ -1665,8 +2088,9 @@ export default function App() {
     e.preventDefault();
     const { title, speaker, date, passage, category } = addSermonForm;
     try {
-      const res = await fetch(`${API_URL}/sermons/`, {
-        method: 'POST',
+      const url = editingSermonId ? `${API_URL}/sermons/${editingSermonId}/` : `${API_URL}/sermons/`;
+      const res = await fetch(url, {
+        method: editingSermonId ? 'PATCH' : 'POST',
         headers: getAdminAuthHeaders(),
         body: JSON.stringify({ title, speaker, date, passage, category })
       });
@@ -1682,7 +2106,105 @@ export default function App() {
     triggerLog(`Sermon "${title}" added to archive.`);
     toast.success("Sermon added successfully!");
     setAddSermonForm({ title: '', speaker: '', date: '', passage: '', category: 'Sabbath Sermons' });
+    setEditingSermonId(null);
     setShowAddSermonModal(false);
+  };
+
+  const handleAdminUpdateStudy = async (id: number) => {
+    const draft = studyDrafts[id];
+    if (!draft) return;
+
+    try {
+      const res = await fetch(`${API_URL}/bible-studies/${id}/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({
+          name: draft.name,
+          email: draft.email,
+          phone: draft.phone,
+          country: draft.country,
+          course: draft.course,
+          status: draft.status,
+        }),
+      });
+      if (!res.ok) throw new Error();
+
+      await fetchBibleStudies();
+      setEditingStudyId(null);
+      triggerLog(`Bible study registration updated: ID ${id}`);
+      toast.success('Bible study saved successfully.');
+    } catch {
+      setBibleStudies((prev) => prev.map((item) => (item.id === id ? { ...item, ...draft } : item)));
+      setEditingStudyId(null);
+      triggerLog(`Bible study registration updated locally: ID ${id}`);
+      toast.success('Bible study saved locally.');
+    }
+  };
+
+  const handleAdminUpdatePrayer = async (id: number) => {
+    const draft = prayerDrafts[id];
+    if (!draft) return;
+
+    try {
+      const res = await fetch(`${API_URL}/prayers/${id}/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({
+          name: draft.name,
+          content: draft.content,
+          confidential: draft.confidential,
+          follow_up_status: draft.follow_up_status,
+          care_request_type: draft.care_request_type,
+          follow_up_notes: draft.follow_up_notes,
+        }),
+      });
+      if (!res.ok) throw new Error();
+
+      await fetchPrayers();
+      setEditingPrayerId(null);
+      triggerLog(`Prayer request updated: ID ${id}`);
+      toast.success('Prayer request saved successfully.');
+    } catch {
+      setPrayers((prev) => prev.map((item) => (item.id === id ? { ...item, ...draft } : item)));
+      setEditingPrayerId(null);
+      triggerLog(`Prayer request updated locally: ID ${id}`);
+      toast.success('Prayer request saved locally.');
+    }
+  };
+
+  const handleAdminUpdateDonation = async (id: number) => {
+    const draft = donationDrafts[id];
+    if (!draft) return;
+
+    const amount = Number(draft.amount);
+    if (Number.isNaN(amount) || amount < 0) {
+      toast.error('Donation amount must be a valid number.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/donations/${id}/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({
+          amount,
+          fund: draft.fund,
+          method: draft.method,
+          status: draft.status,
+        }),
+      });
+      if (!res.ok) throw new Error();
+
+      await fetchDonations();
+      setEditingDonationId(null);
+      triggerLog(`Donation updated: ID ${id}`);
+      toast.success('Donation saved successfully.');
+    } catch {
+      setDonations((prev) => prev.map((item) => (item.id === id ? { ...item, amount, fund: draft.fund, method: draft.method, status: draft.status } : item)));
+      setEditingDonationId(null);
+      triggerLog(`Donation updated locally: ID ${id}`);
+      toast.success('Donation saved locally.');
+    }
   };
 
   // Delete Handlers
@@ -1898,8 +2420,10 @@ export default function App() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/blog/`, {
-        method: 'POST',
+      const scheduledPublish = new Date(`${date}T00:00:00`).toISOString();
+      const url = editingAnnouncementId ? `${API_URL}/blog/${editingAnnouncementId}/` : `${API_URL}/blog/`;
+      const res = await fetch(url, {
+        method: editingAnnouncementId ? 'PATCH' : 'POST',
         headers: getAdminAuthHeaders(),
         body: JSON.stringify({
           title,
@@ -1907,7 +2431,8 @@ export default function App() {
           category: 'announcement',
           featured_image: icon,
           is_published,
-          scheduled_publish: priority === 'high' ? new Date().toISOString() : null,
+          priority,
+          scheduled_publish: scheduledPublish,
         })
       });
 
@@ -1917,6 +2442,7 @@ export default function App() {
 
       await fetchAdminAnnouncements();
       setAddAnnouncementForm({ title: '', body: '', date: '', priority: 'normal', icon: '📣', is_published: true });
+      setEditingAnnouncementId(null);
       triggerLog(`Announcement published: ${title}`);
       toast.success('Announcement saved successfully.');
     } catch {
@@ -1933,6 +2459,64 @@ export default function App() {
     } catch {
       toast.error('Could not remove announcement.');
     }
+  };
+
+  const handleAdminAddLessonVideo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { week, title, date, youtube_id, desc } = addLessonForm;
+    if (!week || !title || !date || !youtube_id || !desc) {
+      toast.error('Please fill in all fields.');
+      return;
+    }
+
+    let ytId = youtube_id.trim();
+    const ytMatch = ytId.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    if (ytMatch) ytId = ytMatch[1];
+
+    try {
+      const url = editingLessonId ? `${API_URL}/lessons/${editingLessonId}/` : `${API_URL}/lessons/`;
+      const res = await fetch(url, {
+        method: editingLessonId ? 'PATCH' : 'POST',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ week: parseInt(week), title, date, youtube_id: ytId, desc }),
+      });
+      if (res.ok) {
+        fetchLessonVideos();
+        toast.success(`Week ${week} lesson video saved!`);
+      } else {
+        const err = await res.json();
+        toast.error(err.week?.[0] || 'Error saving lesson video.');
+        return;
+      }
+    } catch {
+      const newVideo = { week: parseInt(week), title, date, youtubeId: ytId, desc, id: Date.now() };
+      setLessonVideos((prev) => {
+        const next = prev.filter((video) => video.id !== editingLessonId);
+        return [...next, newVideo].sort((a, b) => a.week - b.week);
+      });
+      toast.success(`Week ${week} lesson video saved (offline mode).`);
+    }
+    setAddLessonForm({ week: '', title: '', date: '', youtube_id: '', desc: '' });
+    setEditingLessonId(null);
+    triggerLog(`Lesson Week ${week} video saved: "${title}"`);
+  };
+
+  const handleEditBibleStudy = (item: BibleStudy) => {
+    if (!item.id) return;
+    setEditingStudyId(item.id);
+    setStudyDrafts((prev) => ({ ...prev, [item.id as number]: { ...item } }));
+  };
+
+  const handleEditPrayer = (item: PrayerRequest) => {
+    if (!item.id) return;
+    setEditingPrayerId(item.id);
+    setPrayerDrafts((prev) => ({ ...prev, [item.id as number]: { ...item } }));
+  };
+
+  const handleEditDonation = (item: Donation) => {
+    if (!item.id) return;
+    setEditingDonationId(item.id);
+    setDonationDrafts((prev) => ({ ...prev, [item.id as number]: { ...item } }));
   };
 
   const handleSaveSabbathProgrammes = () => {
@@ -2114,6 +2698,8 @@ export default function App() {
     : gallerySource.filter(g => g.album === selectedGalleryAlbum);
 
   const totalDonations = donations.reduce((sum, item) => sum + item.amount, 0);
+  const visibleAdminTabs = ADMIN_TABS.filter((tab) => allowedAdminTabs.includes(tab.id));
+  const sabbathSchoolOnlyAccess = sabbathProgrammeScope === 'sabbath_school_only';
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2132,6 +2718,18 @@ export default function App() {
           setIsAdminAuthenticated(false);
           return;
         }
+        const nextTabs = Array.isArray(data?.admin_tabs) && data.admin_tabs.length > 0
+          ? data.admin_tabs as AdminTabId[]
+          : ADMIN_TABS.map((tab) => tab.id);
+        const nextSabbathScope: SabbathProgrammeScope = data?.sabbath_programme_scope === 'sabbath_school_only'
+          ? 'sabbath_school_only'
+          : data?.sabbath_programme_scope === 'none'
+            ? 'none'
+            : 'full';
+        setAllowedAdminTabs(nextTabs);
+        setSabbathProgrammeScope(nextSabbathScope);
+        localStorage.setItem('admin_tabs', JSON.stringify(nextTabs));
+        localStorage.setItem('sabbath_programme_scope', nextSabbathScope);
         if (data?.token) {
           localStorage.setItem('admin_token', data.token);
         }
@@ -2144,6 +2742,9 @@ export default function App() {
         fetchAdminAnnouncements();
         fetchProjects(true);
         fetchAdminAuditLogs();
+        if (nextTabs.includes('admin-accounts')) {
+          fetchAdminAccounts();
+        }
         triggerLog(`Admin logged in: ${data?.username || adminLoginForm.username}`);
         toast.success('Welcome back, Administrator!');
       } else {
@@ -2182,6 +2783,24 @@ export default function App() {
       if (!allowed) {
         localStorage.removeItem('admin_token');
         localStorage.removeItem('admin_username');
+        localStorage.removeItem('admin_tabs');
+        localStorage.removeItem('sabbath_programme_scope');
+      } else {
+        const nextTabs = Array.isArray(data?.admin_tabs) && data.admin_tabs.length > 0
+          ? data.admin_tabs as AdminTabId[]
+          : ADMIN_TABS.map((tab) => tab.id);
+        const nextSabbathScope: SabbathProgrammeScope = data?.sabbath_programme_scope === 'sabbath_school_only'
+          ? 'sabbath_school_only'
+          : data?.sabbath_programme_scope === 'none'
+            ? 'none'
+            : 'full';
+        setAllowedAdminTabs(nextTabs);
+        setSabbathProgrammeScope(nextSabbathScope);
+        localStorage.setItem('admin_tabs', JSON.stringify(nextTabs));
+        localStorage.setItem('sabbath_programme_scope', nextSabbathScope);
+        if (nextTabs.includes('admin-accounts')) {
+          fetchAdminAccounts();
+        }
       }
       return allowed;
     } catch {
@@ -2198,11 +2817,22 @@ export default function App() {
     }
   }, [currentRoute]);
 
+  useEffect(() => {
+    if (!allowedAdminTabs.includes(activeAdminTab)) {
+      const fallback = allowedAdminTabs[0] || 'admin-stats';
+      setActiveAdminTab(fallback);
+    }
+  }, [allowedAdminTabs, activeAdminTab]);
+
   const handleAdminLogout = () => {
     setIsAdminAuthenticated(false);
+    setAllowedAdminTabs(ADMIN_TABS.map((tab) => tab.id));
+    setSabbathProgrammeScope('full');
     setAdminLoginForm({ username: '', password: '' });
     setOpenProjectHistoryId(null);
-    setCurrentRoute('home');
+    setCurrentRoute(IS_ADMIN_ENTRY ? 'admin' : 'home');
+    localStorage.removeItem('admin_tabs');
+    localStorage.removeItem('sabbath_programme_scope');
     fetchProjects();
     toast('You have been signed out of the admin portal.');
   };
@@ -2212,6 +2842,7 @@ export default function App() {
     <div>
       <Toaster position="top-right" />
       <a href="#main-content" className="skip-link">Skip to main content</a>
+      <>
       {/* Top Bar with Tagline & Social / Admin Link */}
       <div className="top-bar">
         <div className="container top-bar-content">
@@ -4670,14 +5301,39 @@ export default function App() {
                         </div>
                         <div className="form-group">
                           <label>Password</label>
-                          <input
-                            type="password"
-                            value={adminLoginForm.password}
-                            onChange={e => setAdminLoginForm({ ...adminLoginForm, password: e.target.value })}
-                            required
-                            placeholder="Enter password"
-                            autoComplete="current-password"
-                          />
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type={showAdminPassword ? 'text' : 'password'}
+                              value={adminLoginForm.password}
+                              onChange={e => setAdminLoginForm({ ...adminLoginForm, password: e.target.value })}
+                              required
+                              placeholder="Enter password"
+                              autoComplete="current-password"
+                              style={{ paddingRight: '3rem' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowAdminPassword((visible) => !visible)}
+                              aria-label={showAdminPassword ? 'Hide password' : 'Show password'}
+                              aria-pressed={showAdminPassword}
+                              style={{
+                                position: 'absolute',
+                                right: '0.5rem',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                border: 'none',
+                                background: 'transparent',
+                                color: 'var(--text-muted)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '0.25rem',
+                              }}
+                            >
+                              {showAdminPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                          </div>
                         </div>
                         {adminLoginError && (
                           <div className="alert-danger margin-top-1" style={{ marginBottom: '1rem', fontSize: '0.88rem' }}>
@@ -4710,21 +5366,7 @@ export default function App() {
                 <div className="admin-sidebar card">
                   <h3 className="admin-sidebar-title">Navigation</h3>
                   <ul className="admin-menu">
-                    {[
-                      { id: 'admin-stats', label: '📊 Dashboard Stats' },
-                      { id: 'admin-studies', label: '📖 Bible Studies' },
-                      { id: 'admin-prayers', label: '🙏 Prayer Requests' },
-                      { id: 'admin-donations', label: '💰 Donations' },
-                      { id: 'admin-events', label: '📅 Manage Events' },
-                      { id: 'admin-sermons', label: '🎙️ Manage Sermons' },
-                      { id: 'admin-announcements', label: '📣 Announcements' },
-                      { id: 'admin-audit', label: '🧾 Audit Trail' },
-                      { id: 'admin-projects', label: '🏗️ Manage Projects' },
-                      { id: 'admin-gallery', label: '📸 Manage Gallery' },
-                      { id: 'admin-lessons', label: '🎬 Lesson Videos' },
-                      { id: 'admin-sabbath-programme', label: '🗓️ Sabbath Programme' },
-
-                    ].map(tab => (
+                    {visibleAdminTabs.map(tab => (
                       <li key={tab.id}>
                         <button 
                           onClick={() => setActiveAdminTab(tab.id)} 
@@ -4743,6 +5385,286 @@ export default function App() {
                 </div>
 
                 <div className="admin-main-panel card">
+                  {/* Account Registration Tab */}
+                  {activeAdminTab === 'admin-accounts' && (
+                    <div className="admin-tab-content active">
+                      <h2>Registration Accounts</h2>
+                      <p className="text-muted">Super admin creates staff accounts and assigns exactly which data each account can access.</p>
+
+                      <form onSubmit={handleCreateAdminAccount} className="card margin-top-2" style={{ padding: '1.25rem' }}>
+                        <div className="grid grid-2 gap-2">
+                          <div className="form-group">
+                            <label>Full Name</label>
+                            <input
+                              type="text"
+                              value={adminAccountForm.full_name}
+                              onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, full_name: e.target.value }))}
+                              placeholder="e.g. Jane Doe"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Username *</label>
+                            <input
+                              type="text"
+                              value={adminAccountForm.username}
+                              onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, username: e.target.value }))}
+                              required
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Email *</label>
+                            <input
+                              type="email"
+                              value={adminAccountForm.email}
+                              onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, email: e.target.value }))}
+                              required
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Temporary Password *</label>
+                            <input
+                              type="text"
+                              value={adminAccountForm.password}
+                              onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, password: e.target.value }))}
+                              required
+                            />
+                          </div>
+                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                            <label>Data Access Rights *</label>
+                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                              {ACCESS_RIGHT_OPTIONS.map((section) => (
+                                <label key={section.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.9rem' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={adminAccountForm.access_sections.includes(section.id)}
+                                    onChange={(e) => {
+                                      setAdminAccountForm((prev) => {
+                                        const next = new Set(prev.access_sections);
+                                        if (e.target.checked) {
+                                          next.add(section.id);
+                                        } else {
+                                          next.delete(section.id);
+                                        }
+                                        return { ...prev, access_sections: Array.from(next) };
+                                      });
+                                    }}
+                                  />
+                                  {section.label}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          {adminAccountForm.access_sections.includes('sabbath_programme') && (
+                            <div className="form-group">
+                              <label>Sabbath Programme Scope</label>
+                              <select
+                                value={adminAccountForm.sabbath_programme_scope}
+                                onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, sabbath_programme_scope: e.target.value as SabbathProgrammeScope }))}
+                              >
+                                <option value="full">Full Sabbath Programme Access</option>
+                                <option value="sabbath_school_only">Sabbath School Fields Only</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+
+                        <button type="submit" className="btn btn-accent" disabled={creatingAdminAccount}>
+                          {creatingAdminAccount ? 'Creating...' : 'Create Department Account'}
+                        </button>
+                      </form>
+
+                      <div className="margin-top-3">
+                        <h3 style={{ marginBottom: '0.75rem' }}>Existing Staff Accounts</h3>
+                        <p className="text-muted" style={{ marginTop: 0 }}>Super admin can edit rights, freeze/unfreeze, and reset passwords for staff accounts.</p>
+                        {adminAccountsError && (
+                          <div className="alert-danger" style={{ marginBottom: '0.75rem' }}>{adminAccountsError}</div>
+                        )}
+                        {adminAccountsLoading ? (
+                          <p className="text-muted">Loading accounts...</p>
+                        ) : adminAccounts.length === 0 ? (
+                          <p className="text-muted">No staff accounts found.</p>
+                        ) : (
+                          <div className="table-responsive">
+                            <table className="admin-table">
+                              <thead>
+                                <tr>
+                                  <th>Full Name</th>
+                                  <th>Username</th>
+                                  <th>Email</th>
+                                  <th>Status</th>
+                                  <th>Data Access</th>
+                                  <th>Sabbath Scope</th>
+                                  <th>Level</th>
+                                  <th>Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {adminAccounts.map((account) => (
+                                  editingAdminAccountId === account.id ? (
+                                    <tr key={account.id}>
+                                      <td>
+                                        <input
+                                          value={adminAccountEditForm.full_name}
+                                          onChange={(e) => setAdminAccountEditForm((prev) => ({ ...prev, full_name: e.target.value }))}
+                                          placeholder="Full name"
+                                        />
+                                      </td>
+                                      <td>
+                                        <input
+                                          value={adminAccountEditForm.username}
+                                          onChange={(e) => setAdminAccountEditForm((prev) => ({ ...prev, username: e.target.value }))}
+                                        />
+                                      </td>
+                                      <td>
+                                        <input
+                                          type="email"
+                                          value={adminAccountEditForm.email}
+                                          onChange={(e) => setAdminAccountEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                                        />
+                                      </td>
+                                      <td>
+                                        <span className="badge" style={{ backgroundColor: account.is_active === false ? '#FEE2E2' : 'var(--success-light)', color: account.is_active === false ? '#B91C1C' : 'var(--success)' }}>
+                                          {account.is_active === false ? 'Frozen' : 'Active'}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                          {ACCESS_RIGHT_OPTIONS.map((section) => (
+                                            <label key={section.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem' }}>
+                                              <input
+                                                type="checkbox"
+                                                checked={adminAccountEditForm.access_sections.includes(section.id)}
+                                                onChange={(e) => {
+                                                  setAdminAccountEditForm((prev) => {
+                                                    const next = new Set(prev.access_sections);
+                                                    if (e.target.checked) {
+                                                      next.add(section.id);
+                                                    } else {
+                                                      next.delete(section.id);
+                                                    }
+                                                    return { ...prev, access_sections: Array.from(next) };
+                                                  });
+                                                }}
+                                              />
+                                              {section.label}
+                                            </label>
+                                          ))}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        {adminAccountEditForm.access_sections.includes('sabbath_programme') ? (
+                                          <select
+                                            value={adminAccountEditForm.sabbath_programme_scope}
+                                            onChange={(e) => setAdminAccountEditForm((prev) => ({ ...prev, sabbath_programme_scope: e.target.value as SabbathProgrammeScope }))}
+                                          >
+                                            <option value="full">Full</option>
+                                            <option value="sabbath_school_only">Sabbath School Only</option>
+                                          </select>
+                                        ) : (
+                                          <span className="text-muted">N/A</span>
+                                        )}
+                                      </td>
+                                      <td>{account.is_superuser ? 'Superuser' : 'Staff'}</td>
+                                      <td>
+                                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                          <button onClick={() => handleUpdateAdminAccount(account.id)} disabled={updatingAdminAccount} className="btn btn-small btn-accent">Save</button>
+                                          <button onClick={cancelEditAdminAccount} className="btn btn-small btn-outline">Cancel</button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    <tr key={account.id}>
+                                      <td>{account.full_name || '-'}</td>
+                                      <td><strong>{account.username}</strong></td>
+                                      <td>{account.email || '-'}</td>
+                                      <td>
+                                        <span className="badge" style={{ backgroundColor: account.is_active === false ? '#FEE2E2' : 'var(--success-light)', color: account.is_active === false ? '#B91C1C' : 'var(--success)' }}>
+                                          {account.is_active === false ? 'Frozen' : 'Active'}
+                                        </span>
+                                      </td>
+                                      <td>{account.sections.length > 0 ? account.sections.map((section) => ACCESS_RIGHT_LABELS[section] || section).join(', ') : (account.department_roles.length > 0 ? account.department_roles.join(', ') : 'Full Access Staff')}</td>
+                                      <td>{account.sabbath_programme_scope === 'sabbath_school_only' ? 'Sabbath School Only' : 'Full'}</td>
+                                      <td>{account.is_superuser ? 'Superuser' : 'Staff'}</td>
+                                      <td>
+                                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                          <button onClick={() => openEditAdminAccount(account)} className="btn btn-small btn-outline">Edit</button>
+                                          <button onClick={() => handleToggleFreezeAccount(account)} className="btn btn-small btn-outline">
+                                            {account.is_active === false ? 'Unfreeze' : 'Freeze'}
+                                          </button>
+                                          <button onClick={() => handleResetAccountPassword(account)} className="btn btn-small btn-outline">Change Password</button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className={`modal ${accountFreezeModal ? 'active' : ''}`} role="dialog" aria-modal="true" aria-label="Freeze account confirmation">
+                        <div className="modal-content modal-medium">
+                          <button className="close-modal" onClick={() => setAccountFreezeModal(null)} aria-label="Close freeze confirmation">&times;</button>
+                          <div className="modal-header">
+                            <h2>{accountFreezeModal?.nextState ? 'Unfreeze account' : 'Freeze account'}</h2>
+                          </div>
+                          <div className="modal-body">
+                            <p>
+                              {accountFreezeModal?.nextState
+                                ? `This will restore login access for ${accountFreezeModal.username}.`
+                                : `This will block login access for ${accountFreezeModal?.username}.`}
+                            </p>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                            <button className="btn btn-outline" onClick={() => setAccountFreezeModal(null)}>Cancel</button>
+                            <button className="btn btn-accent" onClick={confirmToggleFreezeAccount}>
+                              {accountFreezeModal?.nextState ? 'Confirm Unfreeze' : 'Confirm Freeze'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={`modal ${accountPasswordModal ? 'active' : ''}`} role="dialog" aria-modal="true" aria-label="Reset account password">
+                        <div className="modal-content modal-medium">
+                          <button className="close-modal" onClick={() => setAccountPasswordModal(null)} aria-label="Close password reset">&times;</button>
+                          <div className="modal-header">
+                            <h2>Change account password</h2>
+                          </div>
+                          <div className="modal-body">
+                            <p style={{ marginBottom: '1rem' }}>
+                              Set a new password for <strong>{accountPasswordModal?.username}</strong>.
+                            </p>
+                            <div className="form-group">
+                              <label>New Password</label>
+                              <input
+                                type="password"
+                                value={accountPasswordForm.password}
+                                onChange={(e) => setAccountPasswordForm((prev) => ({ ...prev, password: e.target.value }))}
+                                placeholder="At least 8 characters"
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label>Confirm Password</label>
+                              <input
+                                type="password"
+                                value={accountPasswordForm.confirmPassword}
+                                onChange={(e) => setAccountPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                                placeholder="Re-enter the new password"
+                              />
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                            <button className="btn btn-outline" onClick={() => setAccountPasswordModal(null)}>Cancel</button>
+                            <button className="btn btn-accent" onClick={confirmResetAccountPassword} disabled={accountPasswordSubmitting}>
+                              {accountPasswordSubmitting ? 'Saving...' : 'Save Password'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Gallery Upload Tab */}
                   {activeAdminTab === 'admin-gallery' && (
                     <div className="admin-tab-content active">
@@ -4910,6 +5832,7 @@ export default function App() {
                                   </p>
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                  <button onClick={() => openLessonEditor(v)} className="btn btn-outline btn-small">Edit</button>
                                   <a
                                     href={`https://www.youtube.com/watch?v=${v.youtubeId}`}
                                     target="_blank"
@@ -4941,18 +5864,23 @@ export default function App() {
                       <p className="text-muted">
                         Manage Sabbath programme information directly. Changes appear immediately on the Sabbath Programme page.
                       </p>
+                      {sabbathSchoolOnlyAccess && (
+                        <div className="alert-info" style={{ marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                          Sabbath School access: you can update Sabbath School fields and Bible Study access only.
+                        </div>
+                      )}
 
                       <div className="card margin-top-2" style={{ padding: '1.25rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                           <strong>Programme Entries: {sabbathProgrammes.length}</strong>
                           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-                            <button type="button" className="btn btn-outline btn-small" onClick={handleAddSabbathProgramme}>
+                            <button type="button" className="btn btn-outline btn-small" onClick={handleAddSabbathProgramme} disabled={sabbathSchoolOnlyAccess}>
                               + Add Entry
                             </button>
-                            <button type="button" className="btn btn-small" style={{ background: '#FEE2E2', color: '#DC2626', border: 'none' }} onClick={handleDeleteSabbathProgramme}>
+                            <button type="button" className="btn btn-small" style={{ background: '#FEE2E2', color: '#DC2626', border: 'none' }} onClick={handleDeleteSabbathProgramme} disabled={sabbathSchoolOnlyAccess}>
                               Remove Entry
                             </button>
-                            <button type="button" className="btn btn-outline btn-small" onClick={handleResetSabbathProgrammes}>
+                            <button type="button" className="btn btn-outline btn-small" onClick={handleResetSabbathProgrammes} disabled={sabbathSchoolOnlyAccess}>
                               Reset to Default
                             </button>
                             <button type="button" className="btn btn-accent btn-small" onClick={handleSaveSabbathProgrammeForm}>
@@ -4982,6 +5910,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.date}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, date: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                               placeholder="Sabbath, August 16, 2026"
                             />
                           </div>
@@ -4991,6 +5920,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.theme}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, theme: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                         </div>
@@ -5010,6 +5940,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.divineServiceTime}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, divineServiceTime: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                         </div>
@@ -5050,6 +5981,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.songLeader}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, songLeader: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                           <div className="form-group">
@@ -5058,6 +5990,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.openingPrayer}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, openingPrayer: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                         </div>
@@ -5069,6 +6002,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.sermonPreacher}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sermonPreacher: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                           <div className="form-group">
@@ -5077,6 +6011,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.sermonRole}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sermonRole: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                         </div>
@@ -5087,6 +6022,7 @@ export default function App() {
                             type="text"
                             value={sabbathProgramForm.sermonTitle}
                             onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sermonTitle: e.target.value }))}
+                            disabled={sabbathSchoolOnlyAccess}
                           />
                         </div>
 
@@ -5096,6 +6032,7 @@ export default function App() {
                             type="text"
                             value={sabbathProgramForm.sermonKeyText}
                             onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sermonKeyText: e.target.value }))}
+                            disabled={sabbathSchoolOnlyAccess}
                           />
                         </div>
 
@@ -5104,6 +6041,7 @@ export default function App() {
                           <textarea
                             value={sabbathProgramForm.sermonSynopsis}
                             onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sermonSynopsis: e.target.value }))}
+                            disabled={sabbathSchoolOnlyAccess}
                             rows={4}
                           />
                         </div>
@@ -5115,6 +6053,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.closingPrayer}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, closingPrayer: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                           <div className="form-group">
@@ -5123,6 +6062,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.benediction}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, benediction: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                         </div>
@@ -5134,6 +6074,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.afternoonTime}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, afternoonTime: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                           <div className="form-group">
@@ -5142,6 +6083,7 @@ export default function App() {
                               type="text"
                               value={sabbathProgramForm.afternoonLeader}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, afternoonLeader: e.target.value }))}
+                              disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                         </div>
@@ -5608,15 +6550,32 @@ export default function App() {
                               <tr><td colSpan={5} className="text-center">No registrations yet.</td></tr>
                             ) : (
                               bibleStudies.map(item => (
-                                <tr key={item.id}>
-                                  <td><strong>{item.name}</strong></td>
-                                  <td>{item.email}<br />{item.phone}</td>
-                                  <td>{item.country}</td>
-                                  <td><span className="badge">{item.course}</span></td>
-                                  <td>
-                                    <button onClick={() => item.id && handleAdminDeleteStudy(item.id)} className="btn btn-small btn-outline">Delete</button>
-                                  </td>
-                                </tr>
+                                editingStudyId === item.id ? (
+                                  <tr key={item.id}>
+                                    <td><input value={studyDrafts[item.id!]?.name ?? item.name} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), name: e.target.value } }))} /></td>
+                                    <td>
+                                      <input value={studyDrafts[item.id!]?.email ?? item.email} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), email: e.target.value } }))} placeholder="Email" />
+                                      <input value={studyDrafts[item.id!]?.phone ?? item.phone} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), phone: e.target.value } }))} placeholder="Phone" style={{ marginTop: '0.35rem' }} />
+                                    </td>
+                                    <td><input value={studyDrafts[item.id!]?.country ?? item.country} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), country: e.target.value } }))} /></td>
+                                    <td><input value={studyDrafts[item.id!]?.course ?? item.course} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), course: e.target.value } }))} /></td>
+                                    <td>
+                                      <button onClick={() => handleAdminUpdateStudy(item.id!)} className="btn btn-small btn-accent">Save</button>
+                                      <button onClick={() => setEditingStudyId(null)} className="btn btn-small btn-outline">Cancel</button>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={item.id}>
+                                    <td><strong>{item.name}</strong></td>
+                                    <td>{item.email}<br />{item.phone}</td>
+                                    <td>{item.country}</td>
+                                    <td><span className="badge">{item.course}</span></td>
+                                    <td>
+                                      <button onClick={() => item.id && handleEditBibleStudy(item)} className="btn btn-small btn-outline">Edit</button>
+                                      <button onClick={() => item.id && handleAdminDeleteStudy(item.id)} className="btn btn-small btn-outline">Delete</button>
+                                    </td>
+                                  </tr>
+                                )
                               ))
                             )}
                           </tbody>
@@ -5644,14 +6603,32 @@ export default function App() {
                               <tr><td colSpan={4} className="text-center">No prayer requests submitted yet.</td></tr>
                             ) : (
                               prayers.map(item => (
-                                <tr key={item.id}>
-                                  <td><strong>{item.name}</strong></td>
-                                  <td>{item.content}</td>
-                                  <td>{item.confidential ? <span className="badge badge-accent">CONFIDENTIAL</span> : <span className="badge">PUBLIC</span>}</td>
-                                  <td>
-                                    <button onClick={() => item.id && handleAdminDeletePrayer(item.id)} className="btn btn-small btn-outline">Delete</button>
-                                  </td>
-                                </tr>
+                                editingPrayerId === item.id ? (
+                                  <tr key={item.id}>
+                                    <td><input value={prayerDrafts[item.id!]?.name ?? item.name} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), name: e.target.value } }))} /></td>
+                                    <td><textarea value={prayerDrafts[item.id!]?.content ?? item.content} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), content: e.target.value } }))} rows={3} /></td>
+                                    <td>
+                                      <select value={(prayerDrafts[item.id!]?.confidential ?? item.confidential) ? 'true' : 'false'} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), confidential: e.target.value === 'true' } }))}>
+                                        <option value="false">PUBLIC</option>
+                                        <option value="true">CONFIDENTIAL</option>
+                                      </select>
+                                    </td>
+                                    <td>
+                                      <button onClick={() => handleAdminUpdatePrayer(item.id!)} className="btn btn-small btn-accent">Save</button>
+                                      <button onClick={() => setEditingPrayerId(null)} className="btn btn-small btn-outline">Cancel</button>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={item.id}>
+                                    <td><strong>{item.name}</strong></td>
+                                    <td>{item.content}</td>
+                                    <td>{item.confidential ? <span className="badge badge-accent">CONFIDENTIAL</span> : <span className="badge">PUBLIC</span>}</td>
+                                    <td>
+                                      <button onClick={() => item.id && handleEditPrayer(item)} className="btn btn-small btn-outline">Edit</button>
+                                      <button onClick={() => item.id && handleAdminDeletePrayer(item.id)} className="btn btn-small btn-outline">Delete</button>
+                                    </td>
+                                  </tr>
+                                )
                               ))
                             )}
                           </tbody>
@@ -5672,19 +6649,36 @@ export default function App() {
                               <th>Fund</th>
                               <th>Method</th>
                               <th>Status</th>
+                              <th>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
                             {donations.length === 0 ? (
-                              <tr><td colSpan={4} className="text-center">No contributions logged.</td></tr>
+                              <tr><td colSpan={5} className="text-center">No contributions logged.</td></tr>
                             ) : (
                               donations.map(item => (
-                                <tr key={item.id}>
-                                  <td><strong>{item.amount.toLocaleString()} UGX</strong></td>
-                                  <td>{item.fund}</td>
-                                  <td>{item.method}</td>
-                                  <td><span className="badge" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>{item.status || 'Success'}</span></td>
-                                </tr>
+                                editingDonationId === item.id ? (
+                                  <tr key={item.id}>
+                                    <td><input type="number" value={String(donationDrafts[item.id!]?.amount ?? item.amount)} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), amount: Number(e.target.value) } }))} /></td>
+                                    <td><input value={donationDrafts[item.id!]?.fund ?? item.fund} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), fund: e.target.value } }))} /></td>
+                                    <td><input value={donationDrafts[item.id!]?.method ?? item.method} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), method: e.target.value } }))} /></td>
+                                    <td><input value={donationDrafts[item.id!]?.status ?? item.status ?? ''} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), status: e.target.value } }))} /></td>
+                                    <td>
+                                      <button onClick={() => handleAdminUpdateDonation(item.id!)} className="btn btn-small btn-accent">Save</button>
+                                      <button onClick={() => setEditingDonationId(null)} className="btn btn-small btn-outline">Cancel</button>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={item.id}>
+                                    <td><strong>{item.amount.toLocaleString()} UGX</strong></td>
+                                    <td>{item.fund}</td>
+                                    <td>{item.method}</td>
+                                    <td><span className="badge" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>{item.status || 'Success'}</span></td>
+                                    <td>
+                                      <button onClick={() => item.id && handleEditDonation(item)} className="btn btn-small btn-outline">Edit</button>
+                                    </td>
+                                  </tr>
+                                )
                               ))
                             )}
                           </tbody>
@@ -5717,6 +6711,7 @@ export default function App() {
                                 <td>{item.date}</td>
                                 <td>{item.location}</td>
                                 <td>
+                                    <button onClick={() => openEventEditor(item)} className="btn btn-small btn-outline">Edit</button>
                                   <button onClick={() => handleAdminDeleteEvent(item.id)} className="btn btn-small btn-outline">Remove</button>
                                 </td>
                               </tr>
@@ -5751,6 +6746,7 @@ export default function App() {
                                 <td>{item.speaker}</td>
                                 <td>{item.date}</td>
                                 <td>
+                                    <button onClick={() => openSermonEditor(item)} className="btn btn-small btn-outline">Edit</button>
                                   <button onClick={() => handleAdminDeleteSermon(item.id)} className="btn btn-small btn-outline">Remove</button>
                                 </td>
                               </tr>
@@ -5854,13 +6850,16 @@ export default function App() {
                                   </p>
                                   <p style={{ margin: 0, fontSize: '0.9rem' }}>{item.body}</p>
                                 </div>
-                                <button
-                                  onClick={() => handleAdminDeleteAnnouncement(item.id)}
-                                  className="btn btn-small"
-                                  style={{ background: '#FEE2E2', color: '#DC2626', border: 'none' }}
-                                >
-                                  Remove
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                  <button onClick={() => openAnnouncementEditor(item)} className="btn btn-small btn-outline">Edit</button>
+                                  <button
+                                    onClick={() => handleAdminDeleteAnnouncement(item.id)}
+                                    className="btn btn-small"
+                                    style={{ background: '#FEE2E2', color: '#DC2626', border: 'none' }}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
                               </div>
                             ))}
 
@@ -5971,6 +6970,7 @@ export default function App() {
       </main>
 
       {/* Footer */}
+      {!IS_ADMIN_ENTRY && (
       <footer className="main-footer">
         <div className="container footer-grid grid grid-3 gap-3">
           <div>
@@ -6009,6 +7009,7 @@ export default function App() {
           <p>&copy; 2026 Seattle International Church, Bugema University. All rights reserved.</p>
         </div>
       </footer>
+      )}
 
       {/* Ministry Detail Modal */}
       <AnimatePresence>
@@ -6227,6 +7228,8 @@ export default function App() {
         </motion.div>
       )}
       </AnimatePresence>
+
+      </>
 
     </div>
   );

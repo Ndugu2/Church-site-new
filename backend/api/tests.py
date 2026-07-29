@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -255,6 +255,10 @@ class AdminSessionAndAuditTests(APITestCase):
 	def setUp(self):
 		self.staff = User.objects.create_user(username='staff_audit', password='Pass12345!', is_staff=True)
 		self.staff_token = Token.objects.create(user=self.staff)
+		sermon_group, _ = Group.objects.get_or_create(name='Access Sermons')
+		audit_group, _ = Group.objects.get_or_create(name='Access Audit Trail')
+		self.staff.groups.add(sermon_group)
+		self.staff.groups.add(audit_group)
 		self.member = User.objects.create_user(username='member_audit', password='Pass12345!')
 		self.member_token = Token.objects.create(user=self.member)
 
@@ -304,3 +308,126 @@ class AdminSessionAndAuditTests(APITestCase):
 		results = res.data.get('results', res.data)
 		self.assertTrue(len(results) >= 1)
 		self.assertTrue(all(item['action'] == 'create' for item in results))
+
+
+class AdminAccountManagementTests(APITestCase):
+	def setUp(self):
+		self.member = User.objects.create_user(username='member_accounts', password='Pass12345!')
+		self.member_token = Token.objects.create(user=self.member)
+
+		self.clerk = User.objects.create_user(username='clerk_admin', password='Pass12345!', is_staff=True)
+		self.clerk_token = Token.objects.create(user=self.clerk)
+		clerk_group, _ = Group.objects.get_or_create(name='Church Clerk')
+		self.clerk.groups.add(clerk_group)
+
+		self.super_admin = User.objects.create_superuser(username='super_admin', email='super@church.org', password='Pass12345!')
+		self.super_admin_token = Token.objects.create(user=self.super_admin)
+
+		self.sabbath_staff = User.objects.create_user(username='ss_admin', password='Pass12345!', is_staff=True)
+		self.sabbath_token = Token.objects.create(user=self.sabbath_staff)
+		ss_group, _ = Group.objects.get_or_create(name='Sabbath School')
+		self.sabbath_staff.groups.add(ss_group)
+
+	def test_non_staff_cannot_access_admin_user_management(self):
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.member_token.key}')
+		res = self.client.get('/api/admin/users/')
+		self.assertEqual(res.status_code, 403)
+
+	def test_staff_non_superuser_cannot_access_admin_user_management(self):
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.clerk_token.key}')
+		res = self.client.get('/api/admin/users/')
+		self.assertEqual(res.status_code, 403)
+
+	def test_sabbath_school_staff_cannot_create_accounts(self):
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.sabbath_token.key}')
+		res = self.client.post('/api/admin/users/', {
+			'username': 'blocked_user',
+			'email': 'blocked@example.com',
+			'password': 'Pass12345!',
+			'access_sections': ['bible_studies'],
+		}, format='json')
+		self.assertEqual(res.status_code, 403)
+
+	def test_super_admin_can_create_account_and_assign_sections(self):
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.super_admin_token.key}')
+		res = self.client.post('/api/admin/users/', {
+			'username': 'evangelistic_staff',
+			'email': 'evangelistic@example.com',
+			'password': 'Pass12345!',
+			'access_sections': ['bible_studies', 'sabbath_programme'],
+			'sabbath_programme_scope': 'sabbath_school_only',
+			'full_name': 'Eva Ngelist',
+		}, format='json')
+		self.assertEqual(res.status_code, 201)
+		created = User.objects.get(username='evangelistic_staff')
+		self.assertTrue(created.is_staff)
+		self.assertTrue(created.groups.filter(name='Access Bible Studies').exists())
+		self.assertTrue(created.groups.filter(name='Access Sabbath Programme').exists())
+		self.assertTrue(created.groups.filter(name='Scope Sabbath School Only').exists())
+		entry = AdminAuditLog.objects.filter(resource_type='StaffAccount', resource_label='evangelistic_staff', action='create').first()
+		self.assertIsNotNone(entry)
+		self.assertEqual(entry.details.get('metadata', {}).get('operation'), 'create_account')
+
+	def test_super_admin_can_edit_account_rights_and_freeze(self):
+		staff = User.objects.create_user(username='editable_staff', email='editable@church.org', password='Pass12345!', is_staff=True)
+		Group.objects.get_or_create(name='Access Bible Studies')[0].user_set.add(staff)
+
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.super_admin_token.key}')
+		res = self.client.patch('/api/admin/users/', {
+			'id': staff.id,
+			'full_name': 'Editable Staff',
+			'username': 'editable_staff_updated',
+			'email': 'updated@church.org',
+			'access_sections': ['announcements', 'projects'],
+			'is_active': False,
+		}, format='json')
+		self.assertEqual(res.status_code, 200)
+
+		staff.refresh_from_db()
+		self.assertEqual(staff.username, 'editable_staff_updated')
+		self.assertEqual(staff.email, 'updated@church.org')
+		self.assertFalse(staff.is_active)
+		self.assertTrue(staff.groups.filter(name='Access Announcements').exists())
+		self.assertTrue(staff.groups.filter(name='Access Projects').exists())
+		self.assertFalse(staff.groups.filter(name='Access Bible Studies').exists())
+		entry = AdminAuditLog.objects.filter(resource_type='StaffAccount', resource_id=str(staff.id), action='update').first()
+		self.assertIsNotNone(entry)
+		self.assertEqual(entry.details.get('metadata', {}).get('operation'), 'update_account')
+		self.assertIn('is_active', entry.details.get('changed_fields', {}))
+
+	def test_cannot_freeze_last_active_superuser(self):
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.super_admin_token.key}')
+		res = self.client.patch('/api/admin/users/', {
+			'id': self.super_admin.id,
+			'is_active': False,
+		}, format='json')
+		self.assertEqual(res.status_code, 400)
+		error_text = str(res.data.get('error', '')).lower()
+		self.assertTrue('last active superuser' in error_text or 'freeze your own account' in error_text)
+		self.super_admin.refresh_from_db()
+		self.assertTrue(self.super_admin.is_active)
+
+	def test_super_admin_can_reset_staff_password(self):
+		staff = User.objects.create_user(username='reset_target', email='reset@church.org', password='OldPass123!', is_staff=True)
+
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.super_admin_token.key}')
+		res = self.client.patch('/api/admin/users/', {
+			'id': staff.id,
+			'new_password': 'NewPass123!'
+		}, format='json')
+		self.assertEqual(res.status_code, 200)
+
+		login_res = self.client.post('/api/login/', {
+			'username': 'reset_target',
+			'password': 'NewPass123!'
+		}, format='json')
+		self.assertEqual(login_res.status_code, 200)
+
+	def test_non_superuser_cannot_patch_account(self):
+		staff = User.objects.create_user(username='patch_target', email='patch@church.org', password='Pass12345!', is_staff=True)
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.clerk_token.key}')
+		res = self.client.patch('/api/admin/users/', {
+			'id': staff.id,
+			'is_active': False,
+		}, format='json')
+		self.assertEqual(res.status_code, 403)

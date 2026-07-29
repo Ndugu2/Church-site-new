@@ -3,9 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from django.contrib.auth import authenticate
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from rest_framework.authtoken.models import Token
 from django.db.models import Q, Sum
 from django.utils import timezone
@@ -68,6 +68,232 @@ class IsStaffOrPublicReadCreate(BasePermission):
         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
 
 
+DEPARTMENT_GROUP_ALIASES = {
+    'church_clerk': {'churchclerk', 'churchclerkdepartment', 'churchclerkteam', 'clerk', 'churchclerkministry'},
+    'sabbath_school': {'sabbathschool', 'sabbathschooldepartment', 'sabbathschoolteam'},
+    'evangelistic': {'evangelistic', 'evangelisticdepartment', 'evangelism', 'evangelismdepartment'},
+}
+
+SECTION_GROUP_ALIASES = {
+    'account_registration': {'accessaccountregistration', 'accountregistration'},
+    'announcements': {'accessannouncements', 'announcements'},
+    'bible_studies': {'accessbiblestudies', 'biblestudies'},
+    'sabbath_programme': {'accesssabbathprogramme', 'sabbathprogramme'},
+    'prayers': {'accessprayers', 'prayers'},
+    'donations': {'accessdonations', 'donations'},
+    'events': {'accessevents', 'events'},
+    'sermons': {'accesssermons', 'sermons'},
+    'audit': {'accessaudit', 'accessaudittrail', 'auditrail', 'adminaudit'},
+    'projects': {'accessprojects', 'projects'},
+    'gallery': {'accessgallery', 'gallery'},
+    'lessons': {'accesslessons', 'lessons', 'lessonvideos'},
+}
+
+SECTION_GROUP_NAMES = {
+    'account_registration': 'Access Account Registration',
+    'announcements': 'Access Announcements',
+    'bible_studies': 'Access Bible Studies',
+    'sabbath_programme': 'Access Sabbath Programme',
+    'prayers': 'Access Prayers',
+    'donations': 'Access Donations',
+    'events': 'Access Events',
+    'sermons': 'Access Sermons',
+    'audit': 'Access Audit Trail',
+    'projects': 'Access Projects',
+    'gallery': 'Access Gallery',
+    'lessons': 'Access Lesson Videos',
+}
+
+SECTION_TO_ADMIN_TAB = {
+    'account_registration': 'admin-accounts',
+    'announcements': 'admin-announcements',
+    'bible_studies': 'admin-studies',
+    'sabbath_programme': 'admin-sabbath-programme',
+    'prayers': 'admin-prayers',
+    'donations': 'admin-donations',
+    'events': 'admin-events',
+    'sermons': 'admin-sermons',
+    'audit': 'admin-audit',
+    'projects': 'admin-projects',
+    'gallery': 'admin-gallery',
+    'lessons': 'admin-lessons',
+}
+
+ALL_ADMIN_TABS = [
+    'admin-stats',
+    'admin-accounts',
+    'admin-studies',
+    'admin-prayers',
+    'admin-donations',
+    'admin-events',
+    'admin-sermons',
+    'admin-announcements',
+    'admin-audit',
+    'admin-projects',
+    'admin-gallery',
+    'admin-lessons',
+    'admin-sabbath-programme',
+]
+
+
+def _canonical_group_name(value):
+    return ''.join(ch for ch in str(value).lower() if ch.isalnum())
+
+
+def _get_department_roles(user):
+    if not user or not user.is_authenticated:
+        return set()
+    normalized = {_canonical_group_name(name) for name in user.groups.values_list('name', flat=True)}
+    roles = set()
+    for role, aliases in DEPARTMENT_GROUP_ALIASES.items():
+        if normalized.intersection(aliases):
+            roles.add(role)
+    return roles
+
+
+def _get_access_sections(user):
+    if not user or not user.is_authenticated:
+        return set()
+    normalized = {_canonical_group_name(name) for name in user.groups.values_list('name', flat=True)}
+    sections = set()
+    for section, aliases in SECTION_GROUP_ALIASES.items():
+        if normalized.intersection(aliases):
+            sections.add(section)
+    return sections
+
+
+def _get_sabbath_scope(user):
+    if not user or not user.is_authenticated:
+        return 'none'
+    normalized = {_canonical_group_name(name) for name in user.groups.values_list('name', flat=True)}
+    if 'scopesabbathschoolonly' in normalized:
+        return 'sabbath_school_only'
+    return 'full'
+
+
+def get_admin_access_profile(user):
+    if not user or not user.is_authenticated or not user.is_staff:
+        return {
+            'department_roles': [],
+            'admin_tabs': [],
+            'sections': [],
+            'sabbath_programme_scope': 'none',
+            'is_full_access': False,
+        }
+
+    roles = _get_department_roles(user)
+    section_access = _get_access_sections(user)
+    if user.is_superuser:
+        all_sections = list(SECTION_TO_ADMIN_TAB.keys())
+        return {
+            'department_roles': sorted(list(roles)),
+            'admin_tabs': ALL_ADMIN_TABS,
+            'sections': all_sections,
+            'sabbath_programme_scope': 'full',
+            'is_full_access': True,
+        }
+
+    # Non-super staff never receive account registration rights.
+    section_access = {section for section in section_access if section != 'account_registration'}
+
+    if not roles:
+        if section_access:
+            tabs = {'admin-stats'}
+            for section in section_access:
+                tab = SECTION_TO_ADMIN_TAB.get(section)
+                if tab:
+                    tabs.add(tab)
+            return {
+                'department_roles': sorted(list(roles)),
+                'admin_tabs': [tab for tab in ALL_ADMIN_TABS if tab in tabs],
+                'sections': sorted(list(section_access)),
+                'sabbath_programme_scope': _get_sabbath_scope(user) if 'sabbath_programme' in section_access else 'none',
+                'is_full_access': False,
+            }
+        return {
+            'department_roles': sorted(list(roles)),
+            'admin_tabs': ['admin-stats'],
+            'sections': [],
+            'sabbath_programme_scope': 'none',
+            'is_full_access': False,
+        }
+
+    tabs = {'admin-stats'}
+    sections = set(section_access)
+    sabbath_scope = 'none'
+
+    for section in sections:
+        tab = SECTION_TO_ADMIN_TAB.get(section)
+        if tab:
+            tabs.add(tab)
+    if 'sabbath_programme' in sections:
+        sabbath_scope = _get_sabbath_scope(user)
+
+    if 'church_clerk' in roles:
+        tabs.update({'admin-studies', 'admin-announcements', 'admin-sabbath-programme'})
+        sections.update({'announcements', 'bible_studies', 'sabbath_programme'})
+        sabbath_scope = 'full'
+
+    if 'sabbath_school' in roles:
+        tabs.update({'admin-studies', 'admin-sabbath-programme'})
+        sections.update({'bible_studies', 'sabbath_programme'})
+        if sabbath_scope != 'full':
+            sabbath_scope = 'sabbath_school_only'
+
+    if 'evangelistic' in roles:
+        tabs.add('admin-studies')
+        sections.add('bible_studies')
+
+    return {
+        'department_roles': sorted(list(roles)),
+        'admin_tabs': [tab for tab in ALL_ADMIN_TABS if tab in tabs],
+        'sections': sorted(list(sections)),
+        'sabbath_programme_scope': sabbath_scope,
+        'is_full_access': False,
+    }
+
+
+def user_can_manage_section(user, section):
+    profile = get_admin_access_profile(user)
+    return bool(profile['is_full_access'] or section in profile['sections'])
+
+
+def _department_role_to_group_name(role):
+    mapping = {
+        'church_clerk': 'Church Clerk',
+        'sabbath_school': 'Sabbath School',
+        'evangelistic': 'Evangelistic',
+    }
+    return mapping.get(role)
+
+
+class IsStaffWithSectionOrReadOnly(BasePermission):
+    required_section = ''
+
+    def has_permission(self, request, view):
+        if request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return True
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff and user_can_manage_section(request.user, self.required_section))
+
+
+class IsStaffWithSectionOrPublicCreateOnly(BasePermission):
+    required_section = ''
+
+    def has_permission(self, request, view):
+        if request.method == 'POST':
+            return True
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff and user_can_manage_section(request.user, self.required_section))
+
+
+class IsStaffWithSectionOrPublicReadCreate(BasePermission):
+    required_section = ''
+
+    def has_permission(self, request, view):
+        if request.method in ('GET', 'HEAD', 'OPTIONS', 'POST'):
+            return True
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff and user_can_manage_section(request.user, self.required_section))
+
+
 class AdminAuditMixin:
     """Reusable hooks to capture create/update/delete activity for admin-managed resources."""
 
@@ -126,7 +352,14 @@ class AdminAuditMixin:
 class SermonViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     queryset = Sermon.objects.all().order_by('-date')
     serializer_class = SermonSerializer
-    permission_classes = [IsStaffOrReadOnly]
+    permission_classes = [IsStaffWithSectionOrReadOnly]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrReadOnly):
+                permission.required_section = 'sermons'
+        return permissions
 
     def get_queryset(self):
         queryset = Sermon.objects.all().order_by('-date')
@@ -158,12 +391,16 @@ class SermonViewSet(AdminAuditMixin, viewsets.ModelViewSet):
 class EventViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     queryset = Event.objects.all().order_by('date')
     serializer_class = EventSerializer
-    permission_classes = [IsStaffOrReadOnly]
+    permission_classes = [IsStaffWithSectionOrReadOnly]
 
     def get_permissions(self):
         if self.action == 'register':
             return [AllowAny()]
-        return [permission() for permission in self.permission_classes]
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrReadOnly):
+                permission.required_section = 'events'
+        return permissions
 
     def get_queryset(self):
         queryset = Event.objects.all().order_by('date')
@@ -191,12 +428,16 @@ class EventViewSet(AdminAuditMixin, viewsets.ModelViewSet):
 class PrayerRequestViewSet(viewsets.ModelViewSet):
     queryset = PrayerRequest.objects.order_by('-created_at')
     serializer_class = PrayerRequestSerializer
-    permission_classes = [IsStaffOrPublicReadCreate]
+    permission_classes = [IsStaffWithSectionOrPublicReadCreate]
 
     def get_permissions(self):
         if self.action == 'support':
             return [IsAuthenticated()]
-        return [permission() for permission in self.permission_classes]
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrPublicReadCreate):
+                permission.required_section = 'prayers'
+        return permissions
     
     @action(detail=True, methods=['post'])
     def support(self, request, pk=None):
@@ -213,17 +454,32 @@ class PrayerRequestViewSet(viewsets.ModelViewSet):
 class BibleStudyViewSet(viewsets.ModelViewSet):
     queryset = BibleStudy.objects.all().order_by('-created_at')
     serializer_class = BibleStudySerializer
-    permission_classes = [IsStaffOrPublicCreateOnly]
+    permission_classes = [IsStaffWithSectionOrPublicCreateOnly]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrPublicCreateOnly):
+                permission.required_section = 'bible_studies'
+        return permissions
 
 class DonationViewSet(viewsets.ModelViewSet):
     queryset = Donation.objects.all().order_by('-created_at')
     serializer_class = DonationSerializer
-    permission_classes = [IsStaffOrPublicCreateOnly]
+    permission_classes = [IsStaffWithSectionOrPublicCreateOnly]
 
     def get_permissions(self):
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            if self.request.user.is_authenticated and self.request.user.is_staff:
+                permission = IsStaffWithSectionOrReadOnly()
+                permission.required_section = 'donations'
+                return [permission]
             return [IsAuthenticated()]
-        return [permission() for permission in self.permission_classes]
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrPublicCreateOnly):
+                permission.required_section = 'donations'
+        return permissions
 
     def get_queryset(self):
         queryset = Donation.objects.all().order_by('-created_at')
@@ -237,7 +493,14 @@ class DonationViewSet(viewsets.ModelViewSet):
 class ProjectViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     queryset = Project.objects.all().order_by('-created_at')
     serializer_class = ProjectSerializer
-    permission_classes = [IsStaffOrReadOnly]
+    permission_classes = [IsStaffWithSectionOrReadOnly]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrReadOnly):
+                permission.required_section = 'projects'
+        return permissions
 
     def get_queryset(self):
         queryset = Project.objects.all().order_by('-created_at')
@@ -314,7 +577,14 @@ class ProjectViewSet(AdminAuditMixin, viewsets.ModelViewSet):
 class LessonVideoViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     queryset = LessonVideo.objects.all().order_by('week')
     serializer_class = LessonVideoSerializer
-    permission_classes = [IsStaffOrReadOnly]
+    permission_classes = [IsStaffWithSectionOrReadOnly]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrReadOnly):
+                permission.required_section = 'lessons'
+        return permissions
 
 
 # ============== NEW VIEWSETS ==============
@@ -368,7 +638,9 @@ class BlogPostViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
             return [AllowAny()]
-        return [IsStaffOrReadOnly()]
+        permission = IsStaffWithSectionOrReadOnly()
+        permission.required_section = 'announcements'
+        return [permission]
 
     def perform_create(self, serializer):
         title = serializer.validated_data.get('title', '')
@@ -559,10 +831,14 @@ class AdminAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     def list(self, request, *args, **kwargs):
         if not request.user.is_staff:
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        if not user_can_manage_section(request.user, 'audit'):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         return super().list(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
         if not request.user.is_staff:
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        if not user_can_manage_section(request.user, 'audit'):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         return super().retrieve(request, *args, **kwargs)
 
@@ -662,6 +938,7 @@ class LoginView(APIView):
         user = authenticate(username=username, password=password)
         if user is not None:
             token, _ = Token.objects.get_or_create(user=user)
+            admin_access = get_admin_access_profile(user)
             return Response({
                 "success": True,
                 "username": user.username,
@@ -669,6 +946,9 @@ class LoginView(APIView):
                 "token": token.key,
                 "is_staff": user.is_staff,
                 "is_superuser": user.is_superuser,
+                "department_roles": admin_access['department_roles'],
+                "admin_tabs": admin_access['admin_tabs'],
+                "sabbath_programme_scope": admin_access['sabbath_programme_scope'],
             }, status=status.HTTP_200_OK)
         return Response({
             "success": False,
@@ -705,12 +985,317 @@ class AdminSessionView(APIView):
 
     def get(self, request):
         user = request.user
+        admin_access = get_admin_access_profile(user)
         return Response({
             'authenticated': True,
             'is_staff': bool(user.is_staff),
             'username': user.username,
             'is_superuser': bool(user.is_superuser),
+            'department_roles': admin_access['department_roles'],
+            'admin_tabs': admin_access['admin_tabs'],
+            'sabbath_programme_scope': admin_access['sabbath_programme_scope'],
         }, status=status.HTTP_200_OK)
+
+
+class AdminUserManagementView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @staticmethod
+    def _user_snapshot(user):
+        access = get_admin_access_profile(user)
+        return {
+            'username': user.username,
+            'email': user.email,
+            'full_name': user.get_full_name(),
+            'is_active': bool(user.is_active),
+            'is_staff': bool(user.is_staff),
+            'is_superuser': bool(user.is_superuser),
+            'sections': access['sections'],
+            'department_roles': access['department_roles'],
+            'sabbath_programme_scope': access['sabbath_programme_scope'],
+        }
+
+    def _write_account_audit(self, action, target, details):
+        actor = self.request.user if self.request.user.is_authenticated else None
+        AdminAuditLog.objects.create(
+            actor=actor,
+            action=action,
+            resource_type='StaffAccount',
+            resource_id=str(target.id),
+            resource_label=target.username,
+            details=details,
+        )
+
+    @staticmethod
+    def _allowed_sections():
+        return {
+            'announcements',
+            'bible_studies',
+            'sabbath_programme',
+            'prayers',
+            'donations',
+            'events',
+            'sermons',
+            'audit',
+            'projects',
+            'gallery',
+            'lessons',
+        }
+
+    @staticmethod
+    def _all_managed_group_names():
+        names = set(SECTION_GROUP_NAMES.values())
+        names.add('Scope Sabbath School Only')
+        for role in ('church_clerk', 'sabbath_school', 'evangelistic'):
+            role_name = _department_role_to_group_name(role)
+            if role_name:
+                names.add(role_name)
+        return names
+
+    def _serialize_staff_user(self, user):
+        access = get_admin_access_profile(user)
+        return {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'full_name': user.get_full_name(),
+            'is_active': bool(user.is_active),
+            'is_superuser': user.is_superuser,
+            'department_roles': access['department_roles'],
+            'sections': access['sections'],
+            'sabbath_programme_scope': access['sabbath_programme_scope'],
+        }
+
+    def _resolve_sections(self, requested_sections):
+        if not isinstance(requested_sections, list):
+            raise ValidationError({'error': 'access_sections must be a list.'})
+        return [section for section in requested_sections if section in self._allowed_sections()]
+
+    def _apply_access_groups(self, user, sections, sabbath_scope, department_role=''):
+        managed_group_names = self._all_managed_group_names()
+        for group in user.groups.filter(name__in=managed_group_names):
+            user.groups.remove(group)
+
+        for section in sections:
+            group_name = SECTION_GROUP_NAMES.get(section)
+            if not group_name:
+                continue
+            group, _ = Group.objects.get_or_create(name=group_name)
+            user.groups.add(group)
+
+        if department_role:
+            role_group_name = _department_role_to_group_name(department_role)
+            if role_group_name:
+                role_group, _ = Group.objects.get_or_create(name=role_group_name)
+                user.groups.add(role_group)
+
+        if 'sabbath_programme' in sections and sabbath_scope == 'sabbath_school_only':
+            scope_group, _ = Group.objects.get_or_create(name='Scope Sabbath School Only')
+            user.groups.add(scope_group)
+
+    def _ensure_access(self, request):
+        if not request.user.is_authenticated or not request.user.is_staff:
+            raise PermissionDenied('Permission denied')
+        if not request.user.is_superuser:
+            raise PermissionDenied('Only super admin can manage registration accounts.')
+
+    def get(self, request):
+        self._ensure_access(request)
+        users = User.objects.filter(is_staff=True).order_by('username')[:200]
+        payload = [self._serialize_staff_user(user) for user in users]
+        return Response(payload, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        self._ensure_access(request)
+
+        username = str(request.data.get('username', '')).strip()
+        email = str(request.data.get('email', '')).strip()
+        password = str(request.data.get('password', '')).strip()
+        department_role = str(request.data.get('department_role', '')).strip()
+        requested_sections = request.data.get('access_sections', [])
+        sabbath_scope = str(request.data.get('sabbath_programme_scope', 'full')).strip()
+        full_name = str(request.data.get('full_name', '')).strip()
+
+        if not username or not email or not password:
+            return Response({'error': 'username, email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            sections = self._resolve_sections(requested_sections)
+        except ValidationError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
+        if not sections and department_role:
+            # Backward compatibility with old role-only payloads.
+            if department_role == 'church_clerk':
+                sections = ['announcements', 'bible_studies', 'sabbath_programme']
+            elif department_role == 'sabbath_school':
+                sections = ['bible_studies', 'sabbath_programme']
+            elif department_role == 'evangelistic':
+                sections = ['bible_studies']
+        if not sections:
+            return Response({'error': 'Select at least one access section.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(username=username).exists():
+            return Response({'error': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(email=email).exists():
+            return Response({'error': 'Email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        first_name = ''
+        last_name = ''
+        if full_name:
+            parts = full_name.split(' ', 1)
+            first_name = parts[0]
+            last_name = parts[1] if len(parts) > 1 else ''
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+            is_staff=True,
+        )
+
+        self._apply_access_groups(user, sections, sabbath_scope, department_role)
+
+        MemberProfile.objects.get_or_create(user=user)
+        Token.objects.get_or_create(user=user)
+
+        payload = self._serialize_staff_user(user)
+        self._write_account_audit('create', user, {
+            'after': self._user_snapshot(user),
+            'metadata': {
+                'operation': 'create_account',
+            }
+        })
+        payload['success'] = True
+        payload['department_role'] = department_role
+        return Response(payload, status=status.HTTP_201_CREATED)
+
+    def patch(self, request):
+        self._ensure_access(request)
+
+        user_id = request.data.get('id')
+        if not user_id:
+            return Response({'error': 'id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            target = User.objects.get(id=int(user_id), is_staff=True)
+        except (TypeError, ValueError, User.DoesNotExist):
+            return Response({'error': 'Staff account not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        before_snapshot = self._user_snapshot(target)
+
+        username = request.data.get('username')
+        email = request.data.get('email')
+        full_name = request.data.get('full_name')
+        is_active = request.data.get('is_active')
+        new_password = request.data.get('new_password')
+        department_role = request.data.get('department_role')
+        requested_sections = request.data.get('access_sections')
+        sabbath_scope = request.data.get('sabbath_programme_scope')
+
+        if username is not None:
+            username = str(username).strip()
+            if not username:
+                return Response({'error': 'username cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
+            if User.objects.exclude(pk=target.pk).filter(username=username).exists():
+                return Response({'error': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+            target.username = username
+
+        if email is not None:
+            email = str(email).strip()
+            if not email:
+                return Response({'error': 'email cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
+            if User.objects.exclude(pk=target.pk).filter(email=email).exists():
+                return Response({'error': 'Email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+            target.email = email
+
+        if full_name is not None:
+            full_name = str(full_name).strip()
+            if full_name:
+                parts = full_name.split(' ', 1)
+                target.first_name = parts[0]
+                target.last_name = parts[1] if len(parts) > 1 else ''
+            else:
+                target.first_name = ''
+                target.last_name = ''
+
+        if is_active is not None:
+            if not isinstance(is_active, bool):
+                return Response({'error': 'is_active must be boolean.'}, status=status.HTTP_400_BAD_REQUEST)
+            if target.pk == request.user.pk and not is_active:
+                return Response({'error': 'You cannot freeze your own account.'}, status=status.HTTP_400_BAD_REQUEST)
+            if target.is_superuser and not is_active:
+                other_active_superusers = User.objects.filter(is_superuser=True, is_staff=True, is_active=True).exclude(pk=target.pk).count()
+                if other_active_superusers == 0:
+                    return Response({'error': 'You cannot freeze the last active superuser account.'}, status=status.HTTP_400_BAD_REQUEST)
+            target.is_active = is_active
+
+        if new_password is not None:
+            new_password = str(new_password).strip()
+            if len(new_password) < 8:
+                return Response({'error': 'new_password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+            target.set_password(new_password)
+
+        current_access = get_admin_access_profile(target)
+        next_sections = current_access['sections']
+        if requested_sections is not None:
+            try:
+                next_sections = self._resolve_sections(requested_sections)
+            except ValidationError as exc:
+                return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+            if not next_sections:
+                return Response({'error': 'Select at least one access section.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        next_scope = sabbath_scope if sabbath_scope in ('full', 'sabbath_school_only') else current_access['sabbath_programme_scope']
+        if 'sabbath_programme' not in next_sections:
+            next_scope = 'none'
+        elif next_scope not in ('full', 'sabbath_school_only'):
+            next_scope = 'full'
+
+        next_role = None
+        if department_role is not None:
+            next_role = str(department_role).strip() or ''
+        elif current_access['department_roles']:
+            next_role = current_access['department_roles'][0]
+        else:
+            next_role = ''
+
+        self._apply_access_groups(target, next_sections, next_scope, next_role)
+        target.is_staff = True
+        target.save()
+        MemberProfile.objects.get_or_create(user=target)
+        Token.objects.get_or_create(user=target)
+
+        after_snapshot = self._user_snapshot(target)
+        changed_fields = {}
+        for field in after_snapshot:
+            if before_snapshot.get(field) != after_snapshot.get(field):
+                changed_fields[field] = {
+                    'before': before_snapshot.get(field),
+                    'after': after_snapshot.get(field),
+                }
+        if new_password is not None:
+            changed_fields['password'] = {
+                'before': 'REDACTED',
+                'after': 'RESET',
+            }
+
+        self._write_account_audit('update', target, {
+            'before': before_snapshot,
+            'after': after_snapshot,
+            'changed_fields': changed_fields,
+            'metadata': {
+                'operation': 'update_account',
+                'password_reset': bool(new_password is not None),
+            }
+        })
+
+        payload = self._serialize_staff_user(target)
+        payload['success'] = True
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class HymnBookViewSet(AdminAuditMixin, viewsets.ModelViewSet):
@@ -792,8 +1377,59 @@ class SabbathProgrammeViewSet(AdminAuditMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = SabbathProgramme.objects.all().order_by('service_date')
-        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
-            return queryset.filter(is_published=True)
-        return queryset
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return queryset
+        return queryset.filter(is_published=True)
+
+    def _ensure_sabbath_programme_access(self):
+        if not self.request.user.is_authenticated or not self.request.user.is_staff:
+            raise PermissionDenied('Permission denied')
+        if not user_can_manage_section(self.request.user, 'sabbath_programme'):
+            raise PermissionDenied('You do not have access to manage Sabbath programme data.')
+
+    def _enforce_sabbath_school_only_scope(self, serializer):
+        access = get_admin_access_profile(self.request.user)
+        if access['sabbath_programme_scope'] != 'sabbath_school_only':
+            return
+
+        instance = serializer.instance
+        if instance is None:
+            raise PermissionDenied('Sabbath School department cannot create Sabbath programme entries.')
+
+        incoming = serializer.validated_data
+        if 'service_date' in incoming and incoming['service_date'] != instance.service_date:
+            raise PermissionDenied('Sabbath School department can only edit Sabbath School fields.')
+        if 'theme' in incoming and incoming['theme'] != instance.theme:
+            raise PermissionDenied('Sabbath School department can only edit Sabbath School fields.')
+        if 'is_published' in incoming and incoming['is_published'] != instance.is_published:
+            raise PermissionDenied('Sabbath School department can only edit Sabbath School fields.')
+
+        if 'content' in incoming:
+            current_content = instance.content or {}
+            next_content = incoming.get('content') or {}
+            for key, value in next_content.items():
+                if key == 'sabbathSchool':
+                    continue
+                if current_content.get(key) != value:
+                    raise PermissionDenied('Sabbath School department can only edit Sabbath School fields.')
+
+    def perform_create(self, serializer):
+        self._ensure_sabbath_programme_access()
+        access = get_admin_access_profile(self.request.user)
+        if access['sabbath_programme_scope'] == 'sabbath_school_only':
+            raise PermissionDenied('Sabbath School department cannot create Sabbath programme entries.')
+        super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        self._ensure_sabbath_programme_access()
+        self._enforce_sabbath_school_only_scope(serializer)
+        super().perform_update(serializer)
+
+    def perform_destroy(self, instance):
+        self._ensure_sabbath_programme_access()
+        access = get_admin_access_profile(self.request.user)
+        if access['sabbath_programme_scope'] == 'sabbath_school_only':
+            raise PermissionDenied('Sabbath School department cannot delete Sabbath programme entries.')
+        super().perform_destroy(instance)
 
 

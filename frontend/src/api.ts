@@ -1,14 +1,15 @@
 // API utility functions for making requests to the Django backend
+import { API_BASE_URL } from './config';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const getAuthToken = () => localStorage.getItem('user_token') || localStorage.getItem('admin_token');
 
 export const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-  const token = localStorage.getItem('user_token');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
   };
 
+  const token = getAuthToken();
   if (token) {
     headers['Authorization'] = `Token ${token}`;
   }

@@ -7,6 +7,14 @@ A modern, full-stack web application for **Seattle International Church** at Bug
 
 ---
 
+## System Documentation
+
+For complete architecture, access-control, API, operations, and testing documentation, see:
+
+- `SYSTEM_DOCUMENTATION.md`
+
+---
+
 ## 🏗️ Project Architecture
 
 ```
