@@ -7,11 +7,15 @@ A modern, full-stack web application for **Seattle International Church** at Bug
 
 ---
 
-## System Documentation
+## Documentation Index
 
-For complete architecture, access-control, API, operations, and testing documentation, see:
+For complete architecture, API, operations, and testing details, use:
 
-- `SYSTEM_DOCUMENTATION.md`
+- `SYSTEM_DOCUMENTATION.md` (primary technical reference)
+- `TESTING_GUIDE.md` (manual testing workflows)
+- `IMPLEMENTATION_GUIDE.md` (feature implementation history)
+- `FEATURE_IMPLEMENTATION_SUMMARY.md` (high-level implemented features)
+- `COMPLETION_VERIFIED.md` (completion verification notes)
 
 ---
 
@@ -21,9 +25,13 @@ For complete architecture, access-control, API, operations, and testing document
 Church Site/
 ├── frontend/                  # React + TypeScript (Vite)
 │   ├── src/
-│   │   ├── App.tsx            # Main app — routing, state, API calls
+│   │   ├── PublicSiteApp.tsx  # Public app root module
+│   │   ├── AdminPortalApp.tsx # Admin app root module
+│   │   ├── main.tsx           # Public bootstrap entry
+│   │   ├── main.admin.tsx     # Admin bootstrap entry
 │   │   └── index.css          # Design system (Deep Blue & Gold palette)
-│   └── index.html             # Entry point with Google Fonts
+│   ├── index.html             # Public entry point
+│   └── admin.html             # Admin entry point
 │
 ├── backend/                   # Python Django REST Framework API
 │   ├── church_backend/        # Django project settings, root URLs

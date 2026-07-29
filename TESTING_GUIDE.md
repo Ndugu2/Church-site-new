@@ -92,7 +92,7 @@ curl http://127.0.0.1:8000/api/events/
 curl http://127.0.0.1:8000/api/prayers/
 
 # Get notifications (requires auth)
-curl -H "Authorization: Bearer YOUR_TOKEN" \
+curl -H "Authorization: Token YOUR_TOKEN" \
   http://127.0.0.1:8000/api/notifications/
 ```
 
@@ -109,6 +109,7 @@ Expected: Server starts on http://localhost:5173
 
 ### 2. Test Navigation
 - ✓ Home page loads
+- ✓ Admin portal loads at http://localhost:5173/admin.html#/admin
 - ✓ All new menu items appear:
   - Blog, Testimonies, Forums, Staff, etc.
 - ✓ Language switcher visible in header
