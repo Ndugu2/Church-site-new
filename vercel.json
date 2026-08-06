@@ -67,7 +67,7 @@
       "root": "backend",
       "framework": "django",
       "entrypoint": "wsgi_entrypoint.py",
-      "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && (python manage.py migrate --noinput || echo \"Migrate skipped: database not ready\")"
+      "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && (python manage.py migrate --noinput || echo \"Migrate skipped: database not ready\") && (python create_superuser.py || echo \"Superuser bootstrap skipped\")"
     }
   }
 }
