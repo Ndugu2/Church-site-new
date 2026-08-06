@@ -4,19 +4,22 @@
     {
       "source": "/static/admin/(.*)",
       "destination": {
-        "service": "backend"
+        "service": "backend",
+        "path": "/static/admin/$1"
       }
     },
     {
       "source": "/static/rest_framework/(.*)",
       "destination": {
-        "service": "backend"
+        "service": "backend",
+        "path": "/static/rest_framework/$1"
       }
     },
     {
       "source": "/media/(.*)",
       "destination": {
-        "service": "backend"
+        "service": "backend",
+        "path": "/media/$1"
       }
     },
     {
@@ -36,19 +39,22 @@
     {
       "source": "/api/(.*)",
       "destination": {
-        "service": "backend"
+        "service": "backend",
+        "path": "/api/$1"
       }
     },
     {
       "source": "/admin/(.*)",
       "destination": {
-        "service": "backend"
+        "service": "backend",
+        "path": "/admin/$1"
       }
     },
     {
       "source": "/(.*)",
       "destination": {
-        "service": "frontend"
+        "service": "frontend",
+        "path": "/$1"
       }
     }
   ],
