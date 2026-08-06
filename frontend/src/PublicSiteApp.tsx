@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { Toaster, toast } from 'react-hot-toast';
-import { Users, GraduationCap, Music, Map as MapIcon, Heart, HandHelping, LogOut, User, BookOpen, Calendar, MessageSquare, Award, Search, X, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Users, GraduationCap, Music, Map as MapIcon, Heart, HandHelping, User, BookOpen, Calendar, MessageSquare, Award, Search, X, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { API_BASE_URL } from './config';
 
 // Import new components
@@ -14,7 +14,6 @@ import { ForumsPage } from './components/ForumsPage';
 import { HymnsPage } from './components/HymnsPage';
 import { CommunityOutreach } from './components/CommunityOutreach';
 import { GoBackToSchool } from './components/GoBackToSchool';
-import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { SabbathProgramme, DEFAULT_SABBATH_PROGRAMMES, type SabbathProgram } from './components/SabbathProgramme';
 
@@ -691,8 +690,6 @@ export default function PublicSiteApp() {
   const [userEmail, setUserEmail] = useState(localStorage.getItem('user_email') || '');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [language, setLanguage] = useState(localStorage.getItem('language') || 'en');
-
   // Core Data States
   const [sermons, setSermons] = useState<Sermon[]>(DEFAULT_SERMONS);
   const [events, setEvents] = useState<ChurchEvent[]>(DEFAULT_EVENTS);

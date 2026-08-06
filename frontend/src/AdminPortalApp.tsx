@@ -852,7 +852,7 @@ export default function AdminPortalApp() {
   const [events, setEvents] = useState<ChurchEvent[]>(DEFAULT_EVENTS);
   const [prayers, setPrayers] = useState<PrayerRequest[]>(DEFAULT_PRAYERS);
   const [bibleStudies, setBibleStudies] = useState<BibleStudy[]>([]);
-  const [selectedStudyGroup, setSelectedStudyGroup] = useState<'all' | 'unassigned' | string>('all');
+  const [selectedStudyGroup] = useState<'all' | 'unassigned' | string>('all');
   const [donations, setDonations] = useState<Donation[]>([]);
   const [testimonies, setTestimonies] = useState<TestimonyItem[]>([]);
   const [projects, setProjects] = useState<ChurchProject[]>(DEFAULT_PROJECTS);
@@ -1839,7 +1839,7 @@ export default function AdminPortalApp() {
     }
   };
 
-  const fetchGroupMembers = async (groupId: number, groupName: string) => {
+  const fetchGroupMembers = async (groupId: number, _groupName: string) => {
     try {
       const res = await fetch(`${API_URL}/bible-study-groups/${groupId}/members/`, { headers: getAdminAuthHeaders() });
       if (!res.ok) throw new Error();
@@ -3569,6 +3569,7 @@ export default function AdminPortalApp() {
       toast.error('Could not export attendees right now.');
     }
   };
+  void handleAdminExportEventAttendees;
 
   const handleAdminDeleteSermon = async (id: number) => {
     try {
@@ -4162,6 +4163,7 @@ export default function AdminPortalApp() {
     }
     return true;
   });
+  void filteredAdminTestimonies;
 
   const totalDonations = donations.reduce((sum, item) => sum + item.amount, 0);
   const studyGroupOptions = Array.from(new Set(
@@ -4175,11 +4177,14 @@ export default function AdminPortalApp() {
     if (selectedStudyGroup === 'unassigned') return !groupName;
     return groupName === selectedStudyGroup;
   });
+  void filteredBibleStudies;
   const bibleStudyGroupSummary = studyGroupOptions.map((groupName) => ({
     groupName,
     count: bibleStudies.filter((item) => (item.group_name?.trim() || '') === groupName).length,
   }));
+  void bibleStudyGroupSummary;
   const unassignedBibleStudyCount = bibleStudies.filter((item) => !(item.group_name?.trim())).length;
+  void unassignedBibleStudyCount;
   const visibleAdminTabs = ADMIN_TABS.filter((tab) => allowedAdminTabs.includes(tab.id));
   const sabbathSchoolOnlyAccess = sabbathProgrammeScope === 'sabbath_school_only';
 
@@ -9082,7 +9087,7 @@ export default function AdminPortalApp() {
                         {[
                           { label: 'Total Collected', value: `${totalAll.toLocaleString()} UGX`, color: '#1e3a8a', bg: '#eff6ff', icon: '??' },
                           { label: 'Transactions', value: donations.length, color: '#059669', bg: '#ecfdf5', icon: '??' },
-                          { label: 'This Month', value: `${donations.filter(d => { const m = new Date(); return true; }).reduce((s, d) => s + d.amount, 0).toLocaleString()} UGX`, color: '#d97706', bg: '#fffbeb', icon: '??' },
+                          { label: 'This Month', value: `${donations.reduce((sum, item) => sum + item.amount, 0).toLocaleString()} UGX`, color: '#d97706', bg: '#fffbeb', icon: '??' },
                           { label: 'Fund Types', value: new Set(donations.map(d => d.fund)).size, color: '#7c3aed', bg: '#f5f3ff', icon: '??' },
                         ].map(({ label, value, color, bg, icon }) => (
                           <div key={label} style={{ padding: '0.85rem 1.1rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, flex: '1', minWidth: '130px' }}>
