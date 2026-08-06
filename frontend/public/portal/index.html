@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redirecting to Admin Portal</title>
+    <meta http-equiv="refresh" content="0; url=/admin.html#/admin" />
+    <script>
+      // Keep /portal usable even when host-level rewrites are not applied.
+      window.location.replace('/admin.html#/admin');
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to Admin Portal...</p>
+    <p><a href="/admin.html#/admin">Continue</a></p>
+  </body>
+</html>
