@@ -6,7 +6,8 @@
     },
     "backend": {
       "root": "backend",
-      "entrypoint": "manage.py"
+      "framework": "django",
+      "entrypoint": "wsgi_entrypoint.py"
     }
   }
 }
