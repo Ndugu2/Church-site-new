@@ -114,18 +114,31 @@ WSGI_APPLICATION = 'church_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 #
-# In production (Vercel), set DATABASE_URL to a hosted Postgres connection string,
-# e.g. postgres://user:password@host:5432/dbname
-# Vercel Postgres, Neon, Supabase, and Railway all provide this variable.
+# Vercel Postgres injects these variables automatically when you connect a
+# Postgres store to your project:
+#   POSTGRES_URL              — pooled connection (use for runtime queries)
+#   POSTGRES_URL_NON_POOLING  — direct connection (use for migrations / DDL)
+#
+# For other providers (Neon, Supabase, Railway) set DATABASE_URL manually.
+# Locally, all three can be left unset and SQLite is used instead.
 
-_DATABASE_URL = os.getenv('DATABASE_URL')
+# Use the non-pooling URL for the Django connection so that migrations work
+# correctly (PgBouncer pools don't support all transaction modes Django needs).
+# At runtime on serverless, each cold-start creates a fresh connection anyway,
+# so pooling at the app layer gives no benefit there either.
+_DATABASE_URL = (
+    os.getenv('POSTGRES_URL_NON_POOLING')
+    or os.getenv('POSTGRES_URL')
+    or os.getenv('DATABASE_URL')
+)
 
 if _DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.config(
             default=_DATABASE_URL,
-            conn_max_age=600,
-            conn_health_checks=True,
+            conn_max_age=0,       # 0 = no persistent connections (safe for serverless)
+            conn_health_checks=False,
+            ssl_require=True,     # Vercel Postgres requires SSL
         )
     }
 else:
