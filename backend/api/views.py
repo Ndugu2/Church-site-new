@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group, User
 from rest_framework.authtoken.models import Token
 from django.db.models import Q, Sum
+from django.db import DatabaseError
 from django.utils import timezone
 from django.utils.text import slugify
 from django.http import HttpResponse
@@ -1275,7 +1276,15 @@ class LoginView(APIView):
             bootstrap_admin_user_if_needed(username, password)
             user = authenticate(username=username, password=password)
         if user is not None:
-            token, _ = Token.objects.get_or_create(user=user)
+            token = Token.objects.filter(user=user).first()
+            if token is None:
+                try:
+                    token, _ = Token.objects.get_or_create(user=user)
+                except DatabaseError:
+                    return Response({
+                        "success": False,
+                        "error": "Authentication storage is not writable. Configure a persistent production database and run migrations."
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             admin_access = get_admin_access_profile(user)
             return Response({
                 "success": True,
