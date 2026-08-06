@@ -7009,7 +7009,7 @@ export default function AdminPortalApp() {
                       </div>
                       <h2 style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Admin Portal</h2>
                       <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.88rem', marginTop: '0.35rem' }}>
-                        Seattle International Church � Staff Access
+                        Seattle International Church | Staff Access
                       </p>
                     </div>
 
