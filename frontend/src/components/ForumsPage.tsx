@@ -26,43 +26,6 @@ const FALLBACK_CATEGORIES = [
   { id: 6, name: 'General Fellowship', description: 'Casual conversations, jokes, recommendations, and general community chat.', thread_count: 63, color: '#EC4899', icon: <MessageCircle size={22} />, tag: 'Social' }
 ];
 
-const FALLBACK_THREADS: Record<number, any[]> = {
-  1: [
-    { id: 101, title: 'Please pray for my mother\'s surgery next week', author: 'Miriam K.', avatar: 'M', time: '2 hours ago', replies: 14, views: 89, likes: 22, pinned: false, tags: ['Prayer Request'], preview: 'She is scheduled for a major surgery on Thursday. Please intercede for her full recovery and the surgeons hands...' },
-    { id: 102, title: 'Morning devotion — "Be still and know that I am God" (Ps 46:10)', author: 'Pastor Kagwa', avatar: 'K', time: '6 hours ago', replies: 31, views: 210, likes: 47, pinned: true, tags: ['Devotional', 'Pastor'], preview: 'In the middle of every storm, there is an invitation to stillness. Today I want us to reflect on what it means to truly be still...' },
-    { id: 103, title: 'Fasting and Prayer this Friday — who is joining?', author: 'Enok T.', avatar: 'E', time: '1 day ago', replies: 26, views: 145, likes: 38, pinned: false, tags: ['Fasting', 'Corporate Prayer'], preview: 'We are organizing a day of fasting and prayer this coming Friday for the new semester. Anyone who wants to join...' },
-    { id: 104, title: 'What does praying without ceasing look like for a student?', author: 'Ruth N.', avatar: 'R', time: '2 days ago', replies: 19, views: 102, likes: 15, pinned: false, tags: ['Discussion'], preview: 'I struggle with maintaining a consistent prayer life with all my assignments and class schedules. How do you all keep it going?' },
-  ],
-  2: [
-    { id: 201, title: 'Sabbath School Lesson Q3 — The Sanctuary: What stood out to you?', author: 'Elder Francis', avatar: 'F', time: '1 day ago', replies: 44, views: 312, likes: 67, pinned: true, tags: ['Sabbath School', 'Q3 2026'], preview: 'This week\'s lesson on the Most Holy Place really challenged me. Especially the part about Christ as our High Priest...' },
-    { id: 202, title: 'Daniel 2 vs Revelation 13 — How are they connected?', author: 'Joseph M.', avatar: 'J', time: '3 days ago', replies: 28, views: 189, likes: 34, pinned: false, tags: ['Prophecy', 'Deep Study'], preview: 'I\'ve been studying both chapters and the parallels are striking. I want to share what I found and get the community\'s thoughts...' },
-    { id: 203, title: 'Best resources for personal Bible study as a student?', author: 'Grace A.', avatar: 'G', time: '4 days ago', replies: 17, views: 134, likes: 29, pinned: false, tags: ['Resources'], preview: 'Looking for good commentaries, apps, or books that are both affordable and academically sound. What works for you?' },
-  ],
-  3: [
-    { id: 301, title: 'Semester 2 study group for Engineering students — join here', author: 'David L.', avatar: 'D', time: '5 hours ago', replies: 9, views: 67, likes: 12, pinned: false, tags: ['Study Group', 'Engineering'], preview: 'Starting a weekly study group every Monday at 7pm in the library. All engineering and IT students welcome...' },
-    { id: 302, title: 'How do you manage faith and end-of-semester pressure?', author: 'Amara S.', avatar: 'A', time: '2 days ago', replies: 33, views: 221, likes: 45, pinned: false, tags: ['Mental Health', 'Student Life'], preview: 'With exams approaching, I find myself skipping worship. I feel guilty but also overwhelmed. Anyone else feel this?' },
-    { id: 303, title: 'Hostel curfew discussion — is 10pm reasonable?', author: 'Caleb R.', avatar: 'C', time: '3 days ago', replies: 41, views: 290, likes: 8, pinned: false, tags: ['Campus Life', 'Hostel'], preview: 'I think a 10pm curfew on weeknights is fair but on Fridays after vespers it can be tight. Thoughts?' },
-  ],
-  4: [
-    { id: 401, title: 'God healed my eyesight — sharing my testimony', author: 'Faith O.', avatar: 'F', time: '3 hours ago', replies: 52, views: 380, likes: 94, pinned: true, tags: ['Healing', 'Miracle'], preview: 'For two years I was told I would need glasses permanently. Last month after a season of prayer, I went for a check-up and...' },
-    { id: 402, title: 'Praise report: Got my scholarship approval today!', author: 'Isaac B.', avatar: 'I', time: '1 day ago', replies: 28, views: 195, likes: 61, pinned: false, tags: ['Answered Prayer', 'Education'], preview: 'I had applied and been rejected twice. I prayed and submitted again, trusting God. Today I received the approval email. God is faithful!' },
-  ],
-  5: [
-    { id: 501, title: '[OFFICIAL] Camp Meeting 2026 — Full Schedule Released', author: 'Church Office', avatar: 'O', time: '2 days ago', replies: 7, views: 445, likes: 88, pinned: true, tags: ['Official', 'Camp Meeting'], preview: 'The full schedule for Bugema Camp Meeting 2026 is now available. Download from the noticeboard or view below...' },
-    { id: 502, title: 'Announcement: New Deacons Ordination — July 26', author: 'Church Clerk', avatar: 'C', time: '3 days ago', replies: 4, views: 230, likes: 42, pinned: true, tags: ['Official', 'Ordination'], preview: 'We are pleased to announce the ordination of four new deacons on Sabbath, July 26 during the morning service...' },
-  ],
-  6: [
-    { id: 601, title: 'What\'s the best affordable restaurant near campus?', author: 'Ben K.', avatar: 'B', time: '4 hours ago', replies: 22, views: 134, likes: 18, pinned: false, tags: ['Food', 'Campus Life'], preview: 'On a student budget, I am always looking for good cheap food near Bugema. Share your recommendations!' },
-    { id: 602, title: 'Let\'s start a book club — who\'s interested?', author: 'Lydia M.', avatar: 'L', time: '1 day ago', replies: 16, views: 88, likes: 27, pinned: false, tags: ['Books', 'Fellowship'], preview: 'I want to start a monthly Christian book club where we read and discuss one book together. First pick: Steps to Christ...' },
-  ]
-};
-
-const HOT_THREADS = [
-  { ...FALLBACK_THREADS[4][0], category: 'Testimonies & Praise', categoryColor: '#F59E0B' },
-  { ...FALLBACK_THREADS[2][0], category: 'Bible Discussion', categoryColor: '#0EA5E9' },
-  { ...FALLBACK_THREADS[3][1], category: 'Student Life', categoryColor: '#10B981' },
-];
-
 function Avatar({ letter, color = 'var(--primary)' }: { letter: string; color?: string }) {
   return (
     <div style={{
@@ -76,8 +39,8 @@ function Avatar({ letter, color = 'var(--primary)' }: { letter: string; color?: 
 
 export const ForumsPage: React.FC = () => {
   const [view, setView] = useState<'categories' | 'threads' | 'thread'>('categories');
-  const [categories, setCategories] = useState(FALLBACK_CATEGORIES);
-  const [selectedCat, setSelectedCat] = useState<typeof FALLBACK_CATEGORIES[0] | null>(null);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [selectedCat, setSelectedCat] = useState<any | null>(null);
   const [selectedThread, setSelectedThread] = useState<any | null>(null);
   const [categoryThreads, setCategoryThreads] = useState<Record<number, any[]>>({});
   const [threadsLoading, setThreadsLoading] = useState(false);
@@ -89,6 +52,20 @@ export const ForumsPage: React.FC = () => {
   const [liked, setLiked] = useState<Record<number, boolean>>({});
 
   const getToken = () => localStorage.getItem('user_token');
+  const isLoggedIn = Boolean(getToken());
+
+  const getApiErrorMessage = (payload: any, fallback: string) => {
+    if (!payload || typeof payload !== 'object') return fallback;
+    if (typeof payload.error === 'string' && payload.error.trim()) return payload.error;
+    const firstValue = Object.values(payload)[0];
+    if (Array.isArray(firstValue) && firstValue.length > 0) {
+      return String(firstValue[0]);
+    }
+    if (typeof firstValue === 'string' && firstValue.trim()) {
+      return firstValue;
+    }
+    return fallback;
+  };
 
   const mapApiThreadToUi = (thread: any, fallbackColor = 'var(--primary)') => {
     const totalLikes = Array.isArray(thread.posts)
@@ -152,7 +129,7 @@ export const ForumsPage: React.FC = () => {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload.error || 'Unable to create discussion.');
+        throw new Error(getApiErrorMessage(errorPayload, 'Unable to create discussion.'));
       }
 
       await fetchThreadsForCategory(selectedCat.id, selectedCat.color || 'var(--primary)');
@@ -189,7 +166,7 @@ export const ForumsPage: React.FC = () => {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload.error || 'Unable to post reply.');
+        throw new Error(getApiErrorMessage(errorPayload, 'Unable to post reply.'));
       }
 
       setReplyText('');
@@ -217,9 +194,11 @@ export const ForumsPage: React.FC = () => {
             tag: cat.tag || FALLBACK_CATEGORIES[idx % FALLBACK_CATEGORIES.length].tag,
           }));
           setCategories(mapped);
+        } else {
+          setCategories([]);
         }
       })
-      .catch(() => {});
+      .catch(() => setCategories([]));
   }, []);
 
   useEffect(() => {
@@ -228,11 +207,7 @@ export const ForumsPage: React.FC = () => {
     }
   }, [view, selectedCat]);
 
-  const threads = selectedCat
-    ? ((categoryThreads[selectedCat.id] && categoryThreads[selectedCat.id].length > 0)
-      ? categoryThreads[selectedCat.id]
-      : (FALLBACK_THREADS[selectedCat.id] || []))
-    : [];
+  const threads = selectedCat ? (categoryThreads[selectedCat.id] || []) : [];
   const filteredThreads = threads.filter(t =>
     t.title.toLowerCase().includes(search.toLowerCase()) ||
     t.preview.toLowerCase().includes(search.toLowerCase())
@@ -244,6 +219,15 @@ export const ForumsPage: React.FC = () => {
   });
   const pinned = sortedThreads.filter(t => t.pinned);
   const regular = sortedThreads.filter(t => !t.pinned);
+  const hotThreads = categories.length > 0
+    ? categories
+        .flatMap((cat) => (categoryThreads[cat.id] || []).slice(0, 1).map((thread) => ({
+          ...thread,
+          category: cat.name,
+          categoryColor: cat.color || 'var(--primary)',
+        })))
+        .slice(0, 3)
+    : [];
 
   return (
     <div>
@@ -295,7 +279,7 @@ export const ForumsPage: React.FC = () => {
                 </div>
                 <motion.div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
                   variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
-                  {HOT_THREADS.map(thread => (
+                  {hotThreads.map(thread => (
                     <motion.div key={thread.id} variants={staggerItem} whileHover={{ x: 4 }}
                       onClick={() => { setSelectedThread(thread); setView('thread'); }}
                       style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', background: 'white', padding: '1rem 1.25rem', borderRadius: '14px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', cursor: 'pointer', borderLeft: `4px solid ${thread.categoryColor}` }}>
@@ -315,6 +299,11 @@ export const ForumsPage: React.FC = () => {
                     </motion.div>
                   ))}
                 </motion.div>
+                {hotThreads.length === 0 && (
+                  <div className="card" style={{ padding: '1rem', marginTop: '0.75rem' }}>
+                    <p style={{ margin: 0, color: '#64748b' }}>No trending threads yet. Create a discussion to get started.</p>
+                  </div>
+                )}
               </motion.div>
 
               {/* Categories Grid */}
@@ -347,6 +336,11 @@ export const ForumsPage: React.FC = () => {
                     </motion.div>
                   ))}
                 </motion.div>
+                {categories.length === 0 && (
+                  <div className="card" style={{ marginTop: '1rem' }}>
+                    <p style={{ margin: 0, color: '#64748b' }}>No forum categories are configured yet. Ask an admin to add categories.</p>
+                  </div>
+                )}
               </motion.div>
             </>
           )}
@@ -470,11 +464,35 @@ export const ForumsPage: React.FC = () => {
               {/* Reply Box */}
               <div style={{ background: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
                 <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Add Your Reply</h4>
+                {!isLoggedIn && (
+                  <div
+                    style={{
+                      border: '1px solid #FECACA',
+                      background: '#FEF2F2',
+                      color: '#991B1B',
+                      borderRadius: '10px',
+                      padding: '0.7rem 0.85rem',
+                      fontSize: '0.86rem',
+                      fontWeight: 600,
+                      marginBottom: '0.8rem',
+                    }}
+                  >
+                    Please log in first to reply to this discussion.
+                  </div>
+                )}
                 <textarea rows={4} placeholder="Share your thoughts, encouragement, or Scripture..." value={replyText} onChange={e => setReplyText(e.target.value)}
                   style={{ width: '100%', padding: '0.85rem 1rem', border: '1.5px solid #e5e7eb', borderRadius: '12px', fontSize: '0.92rem', resize: 'vertical', boxSizing: 'border-box', outline: 'none' }} />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
-                  <button onClick={handleReplySubmit} className="btn-accent"
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.5rem', fontSize: '0.9rem' }}>
+                  <button onClick={handleReplySubmit} className="btn-accent" disabled={!isLoggedIn}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.7rem 1.5rem',
+                      fontSize: '0.9rem',
+                      opacity: isLoggedIn ? 1 : 0.6,
+                      cursor: isLoggedIn ? 'pointer' : 'not-allowed',
+                    }}>
                     <Send size={16} /> Post Reply
                   </button>
                 </div>
@@ -498,6 +516,21 @@ export const ForumsPage: React.FC = () => {
                 <button onClick={() => setShowNewThread(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa' }}><X size={22} /></button>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {!isLoggedIn && (
+                  <div
+                    style={{
+                      border: '1px solid #FECACA',
+                      background: '#FEF2F2',
+                      color: '#991B1B',
+                      borderRadius: '10px',
+                      padding: '0.7rem 0.85rem',
+                      fontSize: '0.86rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Please log in first to create a discussion.
+                  </div>
+                )}
                 <div>
                   <label style={{ display: 'block', fontSize: '0.83rem', fontWeight: '600', color: 'var(--primary)', marginBottom: '0.4rem' }}>Discussion Title *</label>
                   <input type="text" placeholder="What do you want to discuss?" value={newThread.title} onChange={e => setNewThread({...newThread, title: e.target.value})}
@@ -513,8 +546,18 @@ export const ForumsPage: React.FC = () => {
                   <textarea rows={5} placeholder="Write your full message here..." value={newThread.body} onChange={e => setNewThread({...newThread, body: e.target.value})}
                     style={{ width: '100%', padding: '0.75rem 1rem', border: '1.5px solid #e5e7eb', borderRadius: '10px', fontSize: '0.92rem', resize: 'vertical', boxSizing: 'border-box', outline: 'none' }} />
                 </div>
-                <button className="btn-accent" onClick={handleCreateThread}
-                  style={{ padding: '0.9rem', fontWeight: '700', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <button className="btn-accent" onClick={handleCreateThread} disabled={!isLoggedIn}
+                  style={{
+                    padding: '0.9rem',
+                    fontWeight: '700',
+                    fontSize: '0.95rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    opacity: isLoggedIn ? 1 : 0.6,
+                    cursor: isLoggedIn ? 'pointer' : 'not-allowed',
+                  }}>
                   <Send size={16} /> Post Discussion
                 </button>
               </div>

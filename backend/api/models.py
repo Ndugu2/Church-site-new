@@ -21,6 +21,9 @@ class Event(models.Model):
     title = models.CharField(max_length=255)
     date = models.DateField()
     location = models.CharField(max_length=255)
+    category = models.CharField(max_length=100, default='General')
+    capacity = models.PositiveIntegerField(null=True, blank=True)
+    waitlist_enabled = models.BooleanField(default=True)
     desc = models.TextField()
     scheduled_publish = models.DateTimeField(null=True, blank=True)
     is_published = models.BooleanField(default=True)
@@ -53,12 +56,43 @@ class PrayerRequest(models.Model):
     def __str__(self):
         return f"Prayer from {self.name}"
 
+
+class BibleStudyGroup(models.Model):
+    FORMAT_CHOICES = [
+        ('in_person', 'In Person'),
+        ('online', 'Online'),
+        ('hybrid', 'Hybrid'),
+    ]
+    name = models.CharField(max_length=120, unique=True)
+    topic = models.CharField(max_length=255, blank=True, default='')
+    meeting_day = models.CharField(max_length=40, blank=True, default='')
+    meeting_time = models.CharField(max_length=40, blank=True, default='')
+    format = models.CharField(max_length=30, choices=FORMAT_CHOICES, blank=True, default='')
+    leader_name = models.CharField(max_length=150, blank=True, default='')
+    description = models.TextField(blank=True, default='')
+    max_members = models.PositiveIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def member_count(self):
+        return BibleStudy.objects.filter(group_name=self.name).count()
+
 class BibleStudy(models.Model):
     name = models.CharField(max_length=255)
     email = models.EmailField()
     phone = models.CharField(max_length=100)
     country = models.CharField(max_length=100)
     course = models.CharField(max_length=255)
+    group_name = models.CharField(max_length=120, blank=True, default='')
+    registration_type = models.CharField(max_length=30, default='individual')
+    preferred_meeting_day = models.CharField(max_length=40, blank=True, default='')
+    preferred_meeting_time = models.CharField(max_length=40, blank=True, default='')
+    preferred_group_format = models.CharField(max_length=30, blank=True, default='')
+    small_group_notes = models.TextField(blank=True, default='')
     status = models.CharField(max_length=100, default="Pending Guide Assignment")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -386,6 +420,11 @@ class EventAttendance(models.Model):
     """Track event attendance"""
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='attendees')
     member = models.ForeignKey(MemberProfile, on_delete=models.CASCADE)
+    contact_name = models.CharField(max_length=255, blank=True, default='')
+    contact_email = models.EmailField(blank=True, default='')
+    contact_phone = models.CharField(max_length=50, blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+    is_waitlisted = models.BooleanField(default=False)
     registered_at = models.DateTimeField(auto_now_add=True)
     attended = models.BooleanField(default=False)
 
@@ -460,6 +499,66 @@ class SabbathProgramme(models.Model):
 
     def __str__(self):
         return f"{self.service_date}: {self.theme}"
+
+
+class CommunityOutreachPage(models.Model):
+    """Managed content for the Community Outreach page."""
+    page_key = models.CharField(max_length=80, unique=True, default='community-outreach')
+    hero_title = models.CharField(max_length=255, default='Community Outreach')
+    hero_subtitle = models.TextField(default='We visit the sick, comfort the grieving, and stand beside those in crisis — because love is not just a feeling, it is an action.')
+    stats = models.JSONField(default=list)
+    programs = models.JSONField(default=list)
+    upcoming_visits = models.JSONField(default=list)
+    testimonials = models.JSONField(default=list)
+    contact_points = models.JSONField(default=list)
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['page_key']
+
+    def __str__(self):
+        return self.hero_title
+
+
+class GalleryImage(models.Model):
+    """Managed gallery image metadata."""
+    album = models.CharField(max_length=120)
+    title = models.CharField(max_length=255)
+    img_url = models.URLField(max_length=500)
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.album}: {self.title}"
+
+
+class GoBackToSchoolPage(models.Model):
+    """Managed content for the Go Back To School project page."""
+    page_key = models.CharField(max_length=80, unique=True, default='go-back-to-school')
+    hero_title = models.CharField(max_length=255, default='Go Back to School Project')
+    hero_subtitle = models.TextField(default='Volunteers like you are the reason children go back to class')
+    overall_fundraising_title = models.CharField(max_length=255, default='Current Fundraising Campaign')
+    overall_fundraising_copy = models.TextField(default='We are raising funds for students this term. Every contribution goes 100% directly to a student\'s education.')
+    overall_stats = models.JSONField(default=list)
+    student_cases = models.JSONField(default=list)
+    ways_to_give = models.JSONField(default=list)
+    impact_levels = models.JSONField(default=list)
+    contact_points = models.JSONField(default=list)
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['page_key']
+
+    def __str__(self):
+        return self.hero_title
 
 
 class AdminAuditLog(models.Model):

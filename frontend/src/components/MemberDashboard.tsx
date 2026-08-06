@@ -27,21 +27,48 @@ interface DashboardData {
   prayer_requests: number;
 }
 
+interface EventRegistrationRecord {
+  id: number;
+  event_id: number;
+  event_title: string;
+  event_date: string;
+  event_location: string;
+  registered_at: string;
+  attended: boolean;
+  is_waitlisted: boolean;
+  rsvp_status: 'registered' | 'waitlisted' | 'attended' | 'completed';
+}
+
 export const MemberDashboard: React.FC<{ userEmail: string }> = ({ userEmail: _userEmail }) => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [eventRegistrations, setEventRegistrations] = useState<EventRegistrationRecord[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/members/me/`, {
-          headers: {
-            'Authorization': `Token ${localStorage.getItem('user_token')}`
-          }
+        const token = localStorage.getItem('user_token');
+        const headers = {
+          'Authorization': `Token ${token}`
+        };
+
+        const [profileResponse, eventResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/members/me/`, { headers }),
+          fetch(`${API_BASE_URL}/members/my_event_registrations/`, { headers }),
+        ]);
+
+        const profileData = await profileResponse.json();
+        const eventData = eventResponse.ok ? await eventResponse.json() : [];
+
+        const registrations = Array.isArray(eventData) ? eventData : [];
+        setEventRegistrations(registrations);
+        setDashboard({
+          profile: profileData,
+          donations_total: 0,
+          events_attended: registrations.filter((item) => item.rsvp_status === 'attended').length,
+          prayer_requests: 0,
         });
-        const data = await response.json();
-        setDashboard({ profile: data, donations_total: 0, events_attended: 0, prayer_requests: 0 });
       } catch (error) {
         console.error('Error fetching dashboard:', error);
       }
@@ -54,6 +81,12 @@ export const MemberDashboard: React.FC<{ userEmail: string }> = ({ userEmail: _u
   if (!dashboard) return <div style={{ padding: '2rem' }}>No data found</div>;
 
   const profile = dashboard.profile;
+  const statusPalette: Record<EventRegistrationRecord['rsvp_status'], { bg: string; color: string; label: string }> = {
+    registered: { bg: '#DBEAFE', color: '#1D4ED8', label: 'Registered' },
+    waitlisted: { bg: '#FEF3C7', color: '#92400E', label: 'Waitlisted' },
+    attended: { bg: '#DCFCE7', color: '#166534', label: 'Attended' },
+    completed: { bg: '#E2E8F0', color: '#334155', label: 'Completed' },
+  };
 
   return (
     <motion.div
@@ -193,6 +226,46 @@ export const MemberDashboard: React.FC<{ userEmail: string }> = ({ userEmail: _u
               <li>Prayer requests shared: {dashboard.prayer_requests}</li>
               <li>Giving actions recorded: {dashboard.donations_total > 0 ? 1 : 0}</li>
             </ul>
+
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+              <h3 style={{ marginBottom: '0.75rem', color: '#003d7a' }}>Your Event RSVPs</h3>
+              {eventRegistrations.length === 0 ? (
+                <p style={{ color: '#64748b', margin: 0 }}>No event registrations yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {eventRegistrations.map((item) => {
+                    const style = statusPalette[item.rsvp_status] || statusPalette.registered;
+                    return (
+                      <div key={item.id} style={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '0.85rem 1rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        flexWrap: 'wrap'
+                      }}>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600 }}>{item.event_title}</p>
+                          <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.92rem' }}>
+                            {new Date(item.event_date).toLocaleDateString()} • {item.event_location}
+                          </p>
+                        </div>
+                        <span style={{
+                          background: style.bg,
+                          color: style.color,
+                          borderRadius: '999px',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          padding: '0.3rem 0.7rem'
+                        }}>{style.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

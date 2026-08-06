@@ -1,10 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
-    Sermon, Event, PrayerRequest, BibleStudy, Donation, Project, LessonVideo,
+    Sermon, Event, PrayerRequest, BibleStudy, BibleStudyGroup, Donation, Project, LessonVideo,
     MemberProfile, BlogPost, Testimony, ForumCategory, ForumThread, ForumPost,
     StaffMember, PageView, EngagementMetric, Payment, Notification, 
-    EventAttendance, PrayerSupport, HymnBook, Hymn, SabbathProgramme, ProjectUpdateLog,
+    EventAttendance, PrayerSupport, HymnBook, Hymn, SabbathProgramme, CommunityOutreachPage, GalleryImage, GoBackToSchoolPage, ProjectUpdateLog,
     AdminAuditLog
 )
 
@@ -13,7 +13,30 @@ class SermonSerializer(serializers.ModelSerializer):
         model = Sermon
         fields = '__all__'
 
+class BibleStudyGroupSerializer(serializers.ModelSerializer):
+    member_count = serializers.ReadOnlyField()
+
+    class Meta:
+        model = BibleStudyGroup
+        fields = '__all__'
+
 class EventSerializer(serializers.ModelSerializer):
+    attendee_count = serializers.SerializerMethodField()
+    waitlist_count = serializers.SerializerMethodField()
+    seats_remaining = serializers.SerializerMethodField()
+
+    def get_attendee_count(self, obj):
+        return obj.attendees.filter(is_waitlisted=False).count()
+
+    def get_waitlist_count(self, obj):
+        return obj.attendees.filter(is_waitlisted=True).count()
+
+    def get_seats_remaining(self, obj):
+        if obj.capacity is None:
+            return None
+        confirmed = obj.attendees.filter(is_waitlisted=False).count()
+        return max(obj.capacity - confirmed, 0)
+
     class Meta:
         model = Event
         fields = '__all__'
@@ -179,6 +202,15 @@ class NotificationSerializer(serializers.ModelSerializer):
 class EventAttendanceSerializer(serializers.ModelSerializer):
     member_name = serializers.CharField(source='member.user.get_full_name', read_only=True)
     event_title = serializers.CharField(source='event.title', read_only=True)
+    event_date = serializers.DateField(source='event.date', read_only=True)
+    rsvp_status = serializers.SerializerMethodField()
+
+    def get_rsvp_status(self, obj):
+        if obj.attended:
+            return 'attended'
+        if obj.is_waitlisted:
+            return 'waitlisted'
+        return 'registered'
     
     class Meta:
         model = EventAttendance
@@ -212,4 +244,22 @@ class HymnBookSerializer(serializers.ModelSerializer):
 class SabbathProgrammeSerializer(serializers.ModelSerializer):
     class Meta:
         model = SabbathProgramme
+        fields = '__all__'
+
+
+class CommunityOutreachPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CommunityOutreachPage
+        fields = '__all__'
+
+
+class GalleryImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GalleryImage
+        fields = '__all__'
+
+
+class GoBackToSchoolPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GoBackToSchoolPage
         fields = '__all__'

@@ -3,7 +3,8 @@ from .models import (
     Sermon, Event, PrayerRequest, BibleStudy, Donation, Project, LessonVideo,
     MemberProfile, BlogPost, Testimony, ForumCategory, ForumThread, ForumPost,
     StaffMember, PageView, EngagementMetric, Payment, Notification,
-    EventAttendance, PrayerSupport, HymnBook, Hymn, SabbathProgramme, ProjectUpdateLog
+    EventAttendance, PrayerSupport, HymnBook, Hymn, SabbathProgramme, CommunityOutreachPage, GalleryImage, GoBackToSchoolPage, ProjectUpdateLog,
+    AdminAuditLog
 )
 
 
@@ -23,13 +24,14 @@ class SermonAdmin(admin.ModelAdmin):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('title', 'date', 'location', 'is_published')
-    list_filter = ('is_published', 'date')
+    list_display = ('title', 'date', 'location', 'category', 'capacity', 'waitlist_enabled', 'is_published')
+    list_filter = ('category', 'waitlist_enabled', 'is_published', 'date')
     search_fields = ('title', 'location')
     ordering = ('date',)
     readonly_fields = ('created_at',)
     fieldsets = (
-        ('Basic Info', {'fields': ('title', 'date', 'location')}),
+        ('Basic Info', {'fields': ('title', 'date', 'location', 'category')}),
+        ('Registration', {'fields': ('capacity', 'waitlist_enabled')}),
         ('Details', {'fields': ('desc',)}),
         ('Publishing', {'fields': ('is_published', 'scheduled_publish', 'created_at')}),
     )
@@ -50,9 +52,9 @@ class PrayerRequestAdmin(admin.ModelAdmin):
 
 @admin.register(BibleStudy)
 class BibleStudyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'country', 'course', 'status', 'created_at')
-    list_filter = ('status', 'course', 'created_at')
-    search_fields = ('name', 'email', 'country')
+    list_display = ('name', 'email', 'country', 'course', 'group_name', 'status', 'created_at')
+    list_filter = ('status', 'course', 'group_name', 'created_at')
+    search_fields = ('name', 'email', 'country', 'group_name')
     ordering = ('-created_at',)
     readonly_fields = ('created_at',)
 
@@ -79,6 +81,14 @@ class ProjectUpdateLogAdmin(admin.ModelAdmin):
     list_filter = ('action', 'created_at')
     search_fields = ('project_title', 'updated_by__username')
     readonly_fields = ('project', 'project_title', 'action', 'changed_fields', 'updated_by', 'created_at')
+
+
+@admin.register(AdminAuditLog)
+class AdminAuditLogAdmin(admin.ModelAdmin):
+    list_display = ('action', 'resource_type', 'resource_label', 'actor', 'created_at')
+    list_filter = ('action', 'resource_type', 'created_at')
+    search_fields = ('resource_type', 'resource_label', 'actor__username', 'resource_id')
+    readonly_fields = ('actor', 'action', 'resource_type', 'resource_id', 'resource_label', 'details', 'created_at')
 
 
 @admin.register(LessonVideo)
@@ -188,8 +198,8 @@ class NotificationAdmin(admin.ModelAdmin):
 
 @admin.register(EventAttendance)
 class EventAttendanceAdmin(admin.ModelAdmin):
-    list_display = ('event', 'member', 'attended', 'registered_at')
-    list_filter = ('attended', 'registered_at')
+    list_display = ('event', 'member', 'is_waitlisted', 'attended', 'registered_at')
+    list_filter = ('is_waitlisted', 'attended', 'registered_at')
     search_fields = ('event__title', 'member__user__username')
     readonly_fields = ('registered_at',)
 
@@ -246,6 +256,45 @@ class SabbathProgrammeAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Programme Info', {'fields': ('service_date', 'theme', 'is_published')}),
         ('Content', {'fields': ('content',)}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
+
+
+@admin.register(CommunityOutreachPage)
+class CommunityOutreachPageAdmin(admin.ModelAdmin):
+    list_display = ('page_key', 'hero_title', 'is_published', 'updated_at')
+    list_filter = ('is_published', 'updated_at')
+    search_fields = ('page_key', 'hero_title', 'hero_subtitle')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('Page Info', {'fields': ('page_key', 'hero_title', 'hero_subtitle', 'is_published')}),
+        ('Content', {'fields': ('stats', 'programs', 'upcoming_visits', 'testimonials', 'contact_points')}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
+
+
+@admin.register(GalleryImage)
+class GalleryImageAdmin(admin.ModelAdmin):
+    list_display = ('title', 'album', 'is_published', 'created_at')
+    list_filter = ('album', 'is_published', 'created_at')
+    search_fields = ('title', 'album', 'img_url')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('Image Info', {'fields': ('album', 'title', 'img_url', 'is_published')}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
+
+
+@admin.register(GoBackToSchoolPage)
+class GoBackToSchoolPageAdmin(admin.ModelAdmin):
+    list_display = ('page_key', 'hero_title', 'is_published', 'updated_at')
+    list_filter = ('is_published', 'updated_at')
+    search_fields = ('page_key', 'hero_title', 'hero_subtitle', 'overall_fundraising_title')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('Page Info', {'fields': ('page_key', 'hero_title', 'hero_subtitle', 'is_published')}),
+        ('Fundraising', {'fields': ('overall_fundraising_title', 'overall_fundraising_copy', 'overall_stats')}),
+        ('Content', {'fields': ('student_cases', 'ways_to_give', 'impact_levels', 'contact_points')}),
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )
 

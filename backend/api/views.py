@@ -10,20 +10,27 @@ from rest_framework.authtoken.models import Token
 from django.db.models import Q, Sum
 from django.utils import timezone
 from django.utils.text import slugify
+from django.http import HttpResponse
+from django.conf import settings
+import csv
+import os
+import uuid
+import mimetypes
 from .models import (
-    Sermon, Event, PrayerRequest, BibleStudy, Donation, Project, LessonVideo,
+    Sermon, Event, PrayerRequest, BibleStudy, BibleStudyGroup, Donation, Project, LessonVideo,
     MemberProfile, BlogPost, Testimony, ForumCategory, ForumThread, ForumPost,
     StaffMember, PageView, EngagementMetric, Payment, Notification, 
-    EventAttendance, PrayerSupport, HymnBook, Hymn, SabbathProgramme, ProjectUpdateLog,
+    EventAttendance, PrayerSupport, HymnBook, Hymn, SabbathProgramme, CommunityOutreachPage, GalleryImage, GoBackToSchoolPage, ProjectUpdateLog,
     AdminAuditLog
 )
 from .serializers import (
     SermonSerializer, EventSerializer, PrayerRequestSerializer, BibleStudySerializer,
+    BibleStudyGroupSerializer,
     DonationSerializer, ProjectSerializer, LessonVideoSerializer, MemberProfileSerializer,
     BlogPostSerializer, TestimonySerializer, ForumCategorySerializer, ForumThreadSerializer,
     ForumPostSerializer, StaffMemberSerializer, PageViewSerializer, EngagementMetricSerializer,
     PaymentSerializer, NotificationSerializer, EventAttendanceSerializer, PrayerSupportSerializer,
-    UserSerializer, HymnBookSerializer, HymnSerializer, SabbathProgrammeSerializer, ProjectUpdateLogSerializer,
+    UserSerializer, HymnBookSerializer, HymnSerializer, SabbathProgrammeSerializer, CommunityOutreachPageSerializer, GalleryImageSerializer, GoBackToSchoolPageSerializer, ProjectUpdateLogSerializer,
     AdminAuditLogSerializer
 )
 
@@ -33,6 +40,46 @@ class IsStaffOrReadOnly(BasePermission):
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
+
+
+ALLOWED_IMAGE_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+class ImageUploadView(APIView):
+    """Upload an image and return its URL. Staff only."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({'error': 'Staff access required.'}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get('image')
+        if not file:
+            return Response({'error': 'No image file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if file.size > MAX_IMAGE_SIZE_BYTES:
+            return Response({'error': 'Image must be under 5 MB.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        mime = file.content_type or mimetypes.guess_type(file.name)[0] or ''
+        if mime not in ALLOWED_IMAGE_MIME_TYPES:
+            return Response({'error': 'Only JPEG, PNG, WebP, or GIF images are allowed.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ext = mimetypes.guess_extension(mime) or os.path.splitext(file.name)[1] or '.jpg'
+        if ext == '.jpe':
+            ext = '.jpg'
+        filename = f"{uuid.uuid4().hex}{ext}"
+
+        upload_dir = os.path.join(settings.MEDIA_ROOT, 'project_images')
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+
+        with open(filepath, 'wb') as f:
+            for chunk in file.chunks():
+                f.write(chunk)
+
+        image_url = request.build_absolute_uri(f"{settings.MEDIA_URL}project_images/{filename}")
+        return Response({'url': image_url}, status=status.HTTP_201_CREATED)
 
 
 class IsAuthorOrStaffOrReadOnly(BasePermission):
@@ -72,6 +119,10 @@ DEPARTMENT_GROUP_ALIASES = {
     'church_clerk': {'churchclerk', 'churchclerkdepartment', 'churchclerkteam', 'clerk', 'churchclerkministry'},
     'sabbath_school': {'sabbathschool', 'sabbathschooldepartment', 'sabbathschoolteam'},
     'evangelistic': {'evangelistic', 'evangelisticdepartment', 'evangelism', 'evangelismdepartment'},
+    # ── New 4-department model ──────────────────────────────────────────
+    'communication': {'communication', 'communicationdepartment', 'comms', 'commsdept', 'media', 'mediadepartment'},
+    'deaconery': {'deaconery', 'deaconerydepartment', 'deacon', 'deacons', 'deaconsdepartment'},
+    'church_leaders': {'churchleaders', 'churchleadersdepartment', 'leaders', 'leadership', 'churchleadership', 'pastoralteam'},
 }
 
 SECTION_GROUP_ALIASES = {
@@ -79,14 +130,21 @@ SECTION_GROUP_ALIASES = {
     'announcements': {'accessannouncements', 'announcements'},
     'bible_studies': {'accessbiblestudies', 'biblestudies'},
     'sabbath_programme': {'accesssabbathprogramme', 'sabbathprogramme'},
+    'community_outreach': {'accesscommunityoutreach', 'communityoutreach'},
+    'go_back_to_school': {'accessgobacktoschool', 'gobacktoschool', 'backtoschool'},
     'prayers': {'accessprayers', 'prayers'},
     'donations': {'accessdonations', 'donations'},
     'events': {'accessevents', 'events'},
     'sermons': {'accesssermons', 'sermons'},
+    'testimonies': {'accesstestimonies', 'testimonies'},
     'audit': {'accessaudit', 'accessaudittrail', 'auditrail', 'adminaudit'},
     'projects': {'accessprojects', 'projects'},
     'gallery': {'accessgallery', 'gallery'},
     'lessons': {'accesslessons', 'lessons', 'lessonvideos'},
+    'staff': {'accessstaff', 'staff', 'staffdirectory'},
+    'forums': {'accessforums', 'forums', 'forum'},
+    'hymns': {'accesshymns', 'hymns', 'hymnbooks'},
+    'blog': {'accessblog', 'blog', 'blogposts'},
 }
 
 SECTION_GROUP_NAMES = {
@@ -94,29 +152,43 @@ SECTION_GROUP_NAMES = {
     'announcements': 'Access Announcements',
     'bible_studies': 'Access Bible Studies',
     'sabbath_programme': 'Access Sabbath Programme',
+    'community_outreach': 'Access Community Outreach',
+    'go_back_to_school': 'Access Go Back To School',
     'prayers': 'Access Prayers',
     'donations': 'Access Donations',
     'events': 'Access Events',
     'sermons': 'Access Sermons',
+    'testimonies': 'Access Testimonies',
     'audit': 'Access Audit Trail',
     'projects': 'Access Projects',
     'gallery': 'Access Gallery',
     'lessons': 'Access Lesson Videos',
+    'staff': 'Access Staff Directory',
+    'forums': 'Access Forums',
+    'hymns': 'Access Hymns',
+    'blog': 'Access Blog Posts',
 }
 
 SECTION_TO_ADMIN_TAB = {
     'account_registration': 'admin-accounts',
     'announcements': 'admin-announcements',
+    'blog': 'admin-blog',
     'bible_studies': 'admin-studies',
     'sabbath_programme': 'admin-sabbath-programme',
+    'community_outreach': 'admin-community-outreach',
+    'go_back_to_school': 'admin-go-back-to-school',
     'prayers': 'admin-prayers',
     'donations': 'admin-donations',
     'events': 'admin-events',
     'sermons': 'admin-sermons',
+    'testimonies': 'admin-testimonies',
     'audit': 'admin-audit',
     'projects': 'admin-projects',
     'gallery': 'admin-gallery',
     'lessons': 'admin-lessons',
+    'staff': 'admin-staff',
+    'forums': 'admin-forums',
+    'hymns': 'admin-hymns',
 }
 
 ALL_ADMIN_TABS = [
@@ -127,7 +199,14 @@ ALL_ADMIN_TABS = [
     'admin-donations',
     'admin-events',
     'admin-sermons',
+    'admin-testimonies',
     'admin-announcements',
+    'admin-blog',
+    'admin-staff',
+    'admin-forums',
+    'admin-hymns',
+    'admin-community-outreach',
+    'admin-go-back-to-school',
     'admin-audit',
     'admin-projects',
     'admin-gallery',
@@ -230,8 +309,8 @@ def get_admin_access_profile(user):
         sabbath_scope = _get_sabbath_scope(user)
 
     if 'church_clerk' in roles:
-        tabs.update({'admin-studies', 'admin-announcements', 'admin-sabbath-programme'})
-        sections.update({'announcements', 'bible_studies', 'sabbath_programme'})
+        tabs.update({'admin-studies', 'admin-announcements', 'admin-sabbath-programme', 'admin-events'})
+        sections.update({'announcements', 'bible_studies', 'sabbath_programme', 'events'})
         sabbath_scope = 'full'
 
     if 'sabbath_school' in roles:
@@ -241,8 +320,28 @@ def get_admin_access_profile(user):
             sabbath_scope = 'sabbath_school_only'
 
     if 'evangelistic' in roles:
-        tabs.add('admin-studies')
-        sections.add('bible_studies')
+        tabs.update({'admin-studies', 'admin-community-outreach', 'admin-go-back-to-school',
+                     'admin-prayers', 'admin-forums'})
+        sections.update({'bible_studies', 'community_outreach', 'go_back_to_school', 'prayers', 'forums'})
+
+    if 'communication' in roles:
+        tabs.update({'admin-blog', 'admin-announcements', 'admin-gallery', 'admin-lessons',
+                     'admin-testimonies', 'admin-sermons'})
+        sections.update({'blog', 'announcements', 'gallery', 'lessons', 'testimonies', 'sermons'})
+
+    if 'deaconery' in roles:
+        tabs.update({'admin-events', 'admin-donations', 'admin-staff', 'admin-projects'})
+        sections.update({'events', 'donations', 'staff', 'projects'})
+
+    if 'church_leaders' in roles:
+        # Church leaders get full section access (minus account_registration — reserved for superuser)
+        all_non_registration = {s for s in SECTION_TO_ADMIN_TAB.keys() if s != 'account_registration'}
+        sections.update(all_non_registration)
+        for s in all_non_registration:
+            tab = SECTION_TO_ADMIN_TAB.get(s)
+            if tab:
+                tabs.add(tab)
+        sabbath_scope = 'full'
 
     return {
         'department_roles': sorted(list(roles)),
@@ -263,6 +362,9 @@ def _department_role_to_group_name(role):
         'church_clerk': 'Church Clerk',
         'sabbath_school': 'Sabbath School',
         'evangelistic': 'Evangelistic',
+        'communication': 'Communication',
+        'deaconery': 'Deaconery',
+        'church_leaders': 'Church Leaders',
     }
     return mapping.get(role)
 
@@ -396,6 +498,8 @@ class EventViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == 'register':
             return [AllowAny()]
+        if self.action == 'attendees_export':
+            return [IsAuthenticated()]
         permissions = [permission() for permission in self.permission_classes]
         for permission in permissions:
             if isinstance(permission, IsStaffWithSectionOrReadOnly):
@@ -413,17 +517,131 @@ class EventViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         event = self.get_object()
         if not request.user.is_authenticated:
             return Response({'error': 'Must be logged in'}, status=status.HTTP_401_UNAUTHORIZED)
-        
-        try:
-            member = request.user.member_profile
-            attendance, created = EventAttendance.objects.get_or_create(
+
+        member, _ = MemberProfile.objects.get_or_create(user=request.user)
+        attendance_defaults = {
+            'contact_name': str(request.data.get('name', '')).strip(),
+            'contact_email': str(request.data.get('email', '')).strip(),
+            'contact_phone': str(request.data.get('phone', '')).strip(),
+            'notes': str(request.data.get('notes', '')).strip(),
+        }
+
+        attendance = EventAttendance.objects.filter(event=event, member=member).first()
+        created = False
+
+        if attendance is None:
+            confirmed_count = EventAttendance.objects.filter(event=event, is_waitlisted=False).count()
+            has_capacity = event.capacity is None or confirmed_count < event.capacity
+
+            if has_capacity:
+                attendance = EventAttendance.objects.create(
+                    event=event,
+                    member=member,
+                    is_waitlisted=False,
+                    **attendance_defaults,
+                )
+                created = True
+            elif event.waitlist_enabled:
+                attendance = EventAttendance.objects.create(
+                    event=event,
+                    member=member,
+                    is_waitlisted=True,
+                    **attendance_defaults,
+                )
+                created = True
+            else:
+                return Response(
+                    {'error': 'This event is full and waitlist is disabled.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        # If a member re-registers, refresh contact details from the latest submission.
+        if not created:
+            updated = False
+            for field, value in attendance_defaults.items():
+                if value and getattr(attendance, field) != value:
+                    setattr(attendance, field, value)
+                    updated = True
+            if updated:
+                attendance.save(update_fields=['contact_name', 'contact_email', 'contact_phone', 'notes'])
+
+        serializer = EventAttendanceSerializer(attendance)
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        waitlist_position = None
+        if attendance.is_waitlisted:
+            waitlist_position = EventAttendance.objects.filter(
                 event=event,
-                member=member
-            )
-            serializer = EventAttendanceSerializer(attendance)
-            return Response(serializer.data)
-        except MemberProfile.DoesNotExist:
-            return Response({'error': 'Member profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+                is_waitlisted=True,
+                registered_at__lte=attendance.registered_at,
+            ).count()
+
+        return Response(
+            {
+                **serializer.data,
+                'already_registered': not created,
+                'waitlisted': attendance.is_waitlisted,
+                'waitlist_position': waitlist_position,
+            },
+            status=response_status,
+        )
+
+    @action(detail=False, methods=['get'])
+    def attendees_export(self, request):
+        if not request.user.is_staff or not user_can_manage_section(request.user, 'events'):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+        event_id = request.query_params.get('event_id')
+        attendances = EventAttendance.objects.select_related('event', 'member__user').order_by('event__date', 'registered_at')
+        if event_id:
+            attendances = attendances.filter(event_id=event_id)
+
+        response = HttpResponse(content_type='text/csv')
+        suffix = timezone.now().strftime('%Y%m%d_%H%M')
+        response['Content-Disposition'] = f'attachment; filename="event_attendees_{suffix}.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'event_id',
+            'event_title',
+            'event_date',
+            'event_location',
+            'member_username',
+            'member_email',
+            'contact_name',
+            'contact_email',
+            'contact_phone',
+            'rsvp_status',
+            'attended',
+            'registered_at',
+            'notes',
+        ])
+
+        for item in attendances:
+            user = item.member.user
+            if item.attended:
+                rsvp_status = 'attended'
+            elif item.is_waitlisted:
+                rsvp_status = 'waitlisted'
+            else:
+                rsvp_status = 'registered'
+
+            writer.writerow([
+                item.event_id,
+                item.event.title,
+                item.event.date.isoformat(),
+                item.event.location,
+                user.username,
+                user.email,
+                item.contact_name,
+                item.contact_email,
+                item.contact_phone,
+                rsvp_status,
+                'yes' if item.attended else 'no',
+                item.registered_at.isoformat(),
+                item.notes,
+            ])
+
+        return response
 
 class PrayerRequestViewSet(viewsets.ModelViewSet):
     queryset = PrayerRequest.objects.order_by('-created_at')
@@ -462,6 +680,48 @@ class BibleStudyViewSet(viewsets.ModelViewSet):
             if isinstance(permission, IsStaffWithSectionOrPublicCreateOnly):
                 permission.required_section = 'bible_studies'
         return permissions
+
+class BibleStudyGroupViewSet(viewsets.ModelViewSet):
+    queryset = BibleStudyGroup.objects.all().order_by('name')
+    serializer_class = BibleStudyGroupSerializer
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsAuthenticated()]
+        permission = IsStaffWithSectionOrReadOnly()
+        permission.required_section = 'bible_studies'
+        return [permission]
+
+    @action(detail=True, methods=['get'])
+    def members(self, request, pk=None):
+        group = self.get_object()
+        members = BibleStudy.objects.filter(group_name=group.name).order_by('name')
+        from .serializers import BibleStudySerializer
+        return Response(BibleStudySerializer(members, many=True).data)
+
+    @action(detail=True, methods=['post'])
+    def assign_member(self, request, pk=None):
+        group = self.get_object()
+        member_id = request.data.get('member_id')
+        try:
+            study = BibleStudy.objects.get(pk=member_id)
+            study.group_name = group.name
+            study.save(update_fields=['group_name'])
+            return Response({'status': 'assigned'})
+        except BibleStudy.DoesNotExist:
+            return Response({'error': 'Member not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['post'])
+    def remove_member(self, request, pk=None):
+        group = self.get_object()
+        member_id = request.data.get('member_id')
+        try:
+            study = BibleStudy.objects.get(pk=member_id, group_name=group.name)
+            study.group_name = ''
+            study.save(update_fields=['group_name'])
+            return Response({'status': 'removed'})
+        except BibleStudy.DoesNotExist:
+            return Response({'error': 'Member not found in this group'}, status=status.HTTP_404_NOT_FOUND)
 
 class DonationViewSet(viewsets.ModelViewSet):
     queryset = Donation.objects.all().order_by('-created_at')
@@ -616,6 +876,40 @@ class MemberProfileViewSet(viewsets.ModelViewSet):
         except MemberProfile.DoesNotExist:
             return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    @action(detail=False, methods=['get'])
+    def my_event_registrations(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Not authenticated'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        profile, _ = MemberProfile.objects.get_or_create(user=request.user)
+        attendances = EventAttendance.objects.filter(member=profile).select_related('event').order_by('event__date', '-registered_at')
+        today = timezone.localdate()
+
+        payload = []
+        for item in attendances:
+            if item.attended:
+                rsvp_status = 'attended'
+            elif item.is_waitlisted:
+                rsvp_status = 'waitlisted'
+            elif item.event.date < today:
+                rsvp_status = 'completed'
+            else:
+                rsvp_status = 'registered'
+
+            payload.append({
+                'id': item.id,
+                'event_id': item.event_id,
+                'event_title': item.event.title,
+                'event_date': item.event.date,
+                'event_location': item.event.location,
+                'registered_at': item.registered_at,
+                'attended': item.attended,
+                'is_waitlisted': item.is_waitlisted,
+                'rsvp_status': rsvp_status,
+            })
+
+        return Response(payload)
+
 class BlogPostViewSet(viewsets.ModelViewSet):
     serializer_class = BlogPostSerializer
 
@@ -637,6 +931,8 @@ class BlogPostViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [AllowAny()]
+        if self.action == 'view' and self.request.method == 'POST':
             return [AllowAny()]
         permission = IsStaffWithSectionOrReadOnly()
         permission.required_section = 'announcements'
@@ -769,10 +1065,7 @@ class ForumThreadViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not self.request.user.is_authenticated:
             raise ValidationError({'error': 'Authentication required'})
-        try:
-            profile = self.request.user.member_profile
-        except MemberProfile.DoesNotExist:
-            raise ValidationError({'error': 'Member profile not found'})
+        profile, _ = MemberProfile.objects.get_or_create(user=self.request.user)
         serializer.save(author=profile)
     
     @action(detail=False, methods=['get'])
@@ -793,10 +1086,7 @@ class ForumPostViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not self.request.user.is_authenticated:
             raise ValidationError({'error': 'Authentication required'})
-        try:
-            profile = self.request.user.member_profile
-        except MemberProfile.DoesNotExist:
-            raise ValidationError({'error': 'Member profile not found'})
+        profile, _ = MemberProfile.objects.get_or_create(user=self.request.user)
         serializer.save(author=profile)
     
     @action(detail=True, methods=['post'])
@@ -1036,10 +1326,14 @@ class AdminUserManagementView(APIView):
             'donations',
             'events',
             'sermons',
+            'testimonies',
             'audit',
             'projects',
             'gallery',
             'lessons',
+            'staff',
+            'forums',
+            'hymns',
         }
 
     @staticmethod
@@ -1431,5 +1725,59 @@ class SabbathProgrammeViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         if access['sabbath_programme_scope'] == 'sabbath_school_only':
             raise PermissionDenied('Sabbath School department cannot delete Sabbath programme entries.')
         super().perform_destroy(instance)
+
+
+class CommunityOutreachPageViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    serializer_class = CommunityOutreachPageSerializer
+    permission_classes = [IsStaffWithSectionOrReadOnly]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrReadOnly):
+                permission.required_section = 'community_outreach'
+        return permissions
+
+    def get_queryset(self):
+        queryset = CommunityOutreachPage.objects.all().order_by('page_key')
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return queryset
+        return queryset.filter(is_published=True)
+
+
+class GalleryImageViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    serializer_class = GalleryImageSerializer
+    permission_classes = [IsStaffWithSectionOrReadOnly]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrReadOnly):
+                permission.required_section = 'gallery'
+        return permissions
+
+    def get_queryset(self):
+        queryset = GalleryImage.objects.all().order_by('-created_at')
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return queryset
+        return queryset.filter(is_published=True)
+
+
+class GoBackToSchoolPageViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    serializer_class = GoBackToSchoolPageSerializer
+    permission_classes = [IsStaffWithSectionOrReadOnly]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        for permission in permissions:
+            if isinstance(permission, IsStaffWithSectionOrReadOnly):
+                permission.required_section = 'go_back_to_school'
+        return permissions
+
+    def get_queryset(self):
+        queryset = GoBackToSchoolPage.objects.all().order_by('page_key')
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return queryset
+        return queryset.filter(is_published=True)
 
 

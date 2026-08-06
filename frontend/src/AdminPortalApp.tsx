@@ -13,8 +13,8 @@ import { StaffDirectory } from './components/StaffDirectory';
 import { MemberDashboard } from './components/MemberDashboard';
 import { ForumsPage } from './components/ForumsPage';
 import { HymnsPage } from './components/HymnsPage';
-import { CommunityOutreach } from './components/CommunityOutreach';
-import { GoBackToSchool } from './components/GoBackToSchool';
+import { CommunityOutreach, DEFAULT_COMMUNITY_OUTREACH_CONTENT, type CommunityOutreachPageContent } from './components/CommunityOutreach';
+import { DEFAULT_GO_BACK_TO_SCHOOL_CONTENT, type GoBackToSchoolPageContent, GoBackToSchool } from './components/GoBackToSchool';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { SabbathProgramme, DEFAULT_SABBATH_PROGRAMMES, type SabbathProgram } from './components/SabbathProgramme';
@@ -87,6 +87,7 @@ interface Sermon {
   date: string;
   passage: string;
   category: string;
+  youtube_id?: string;
 }
 
 interface ChurchEvent {
@@ -95,6 +96,13 @@ interface ChurchEvent {
   date: string;
   location: string;
   desc: string;
+  category?: string;
+  capacity?: number | null;
+  waitlist_enabled?: boolean;
+  attendee_count?: number;
+  waitlist_count?: number;
+  seats_remaining?: number | null;
+  is_published?: boolean;
 }
 
 interface BibleStudy {
@@ -104,6 +112,7 @@ interface BibleStudy {
   phone: string;
   country: string;
   course: string;
+  group_name?: string;
   registration_type?: 'individual' | 'small_group';
   preferred_meeting_day?: string;
   preferred_meeting_time?: string;
@@ -130,6 +139,7 @@ interface TestimonyItem {
   created_at: string;
   testimony_type?: 'prayer_answered' | 'spiritual_growth' | 'community_support' | 'healing_restoration' | 'outreach_impact';
   next_step?: 'none' | 'mentor' | 'growth_class' | 'prayer_team' | 'service_team';
+  is_approved?: boolean;
   is_featured?: boolean;
 }
 
@@ -163,6 +173,7 @@ interface ProjectHistoryEntry {
 }
 
 type ProjectHistoryActionFilter = 'all' | 'create' | 'update' | 'delete';
+type AdminTestimonyFilter = 'all' | 'pending' | 'approved' | 'featured';
 
 const PROJECT_HISTORY_FIELD_LABELS: Record<string, string> = {
   title: 'Title',
@@ -211,6 +222,7 @@ interface GalleryImage {
   title: string;
   img_url: string;
   created_at?: string;
+  is_published?: boolean;
 }
 
 interface ActivityLog {
@@ -243,6 +255,58 @@ interface Announcement {
   is_published?: boolean;
 }
 
+interface StaffDirectoryRecord {
+  id: number;
+  user: number;
+  name?: string;
+  position: string;
+  department: string;
+  bio: string;
+  photo: string;
+  email: string;
+  phone: string;
+  order: number;
+}
+
+interface ForumCategoryRecord {
+  id: number;
+  name: string;
+  description: string;
+  thread_count?: number;
+}
+
+interface ForumThreadRecord {
+  id: number;
+  title: string;
+  category: number;
+  category_name?: string;
+  author_name?: string;
+  post_count?: number;
+  pinned: boolean;
+  closed: boolean;
+  updated_at?: string;
+}
+
+interface HymnBookRecord {
+  id: number;
+  title: string;
+  abbreviation: string;
+  publisher: string;
+  year?: number;
+  hymn_count: number;
+  is_featured: boolean;
+}
+
+interface HymnRecord {
+  id: number;
+  hymn_book: number;
+  number: number;
+  title: string;
+  author: string;
+  theme: string;
+  hymn_book_abbr?: string;
+}
+
 interface EventRegistrationReceipt {
   eventTitle: string;
   reference: string;
@@ -258,11 +322,18 @@ type AdminTabId =
   | 'admin-donations'
   | 'admin-events'
   | 'admin-sermons'
+  | 'admin-testimonies'
   | 'admin-announcements'
+  | 'admin-staff'
+  | 'admin-forums'
+  | 'admin-hymns'
+  | 'admin-community-outreach'
+  | 'admin-go-back-to-school'
   | 'admin-audit'
   | 'admin-projects'
   | 'admin-gallery'
   | 'admin-lessons'
+  | 'admin-blog'
   | 'admin-sabbath-programme';
 
 type AdminTabMeta = { id: AdminTabId; label: string };
@@ -275,9 +346,16 @@ const ADMIN_TABS: AdminTabMeta[] = [
   { id: 'admin-donations', label: '💰 Donations' },
   { id: 'admin-events', label: '📅 Manage Events' },
   { id: 'admin-sermons', label: '🎙️ Manage Sermons' },
+  { id: 'admin-testimonies', label: '✨ Testimonies' },
   { id: 'admin-announcements', label: '📣 Announcements' },
+  { id: 'admin-staff', label: '🧑‍💼 Staff Directory' },
+  { id: 'admin-forums', label: '💬 Forums' },
+  { id: 'admin-hymns', label: '🎵 Hymns Library' },
+  { id: 'admin-community-outreach', label: '🤝 Community Outreach' },
+  { id: 'admin-go-back-to-school', label: '🎒 Go Back To School' },
   { id: 'admin-audit', label: '🧾 Audit Trail' },
   { id: 'admin-projects', label: '🏗️ Manage Projects' },
+  { id: 'admin-blog', label: '📝 Blog Posts' },
   { id: 'admin-gallery', label: '📸 Manage Gallery' },
   { id: 'admin-lessons', label: '🎬 Lesson Videos' },
   { id: 'admin-sabbath-programme', label: '🗓️ Sabbath Programme' },
@@ -285,12 +363,19 @@ const ADMIN_TABS: AdminTabMeta[] = [
 
 const ACCESS_RIGHT_OPTIONS: Array<{ id: string; label: string }> = [
   { id: 'announcements', label: 'Announcements' },
+  { id: 'blog', label: 'Blog Posts' },
+  { id: 'community_outreach', label: 'Community Outreach' },
+  { id: 'go_back_to_school', label: 'Go Back To School' },
   { id: 'bible_studies', label: 'Bible Study' },
   { id: 'sabbath_programme', label: 'Sabbath Programme' },
   { id: 'prayers', label: 'Prayer Requests' },
   { id: 'donations', label: 'Donations' },
   { id: 'events', label: 'Manage Events' },
   { id: 'sermons', label: 'Manage Sermons' },
+  { id: 'testimonies', label: 'Testimonies' },
+  { id: 'staff', label: 'Staff Directory' },
+  { id: 'forums', label: 'Forums' },
+  { id: 'hymns', label: 'Hymns Library' },
   { id: 'audit', label: 'Audit Trail' },
   { id: 'projects', label: 'Manage Projects' },
   { id: 'gallery', label: 'Manage Gallery' },
@@ -300,266 +385,129 @@ const ACCESS_RIGHT_OPTIONS: Array<{ id: string; label: string }> = [
 const ACCESS_RIGHT_LABELS: Record<string, string> = {
   account_registration: 'Registration Accounts',
   announcements: 'Announcements',
+  blog: 'Blog Posts',
+  community_outreach: 'Community Outreach',
+  go_back_to_school: 'Go Back To School',
   bible_studies: 'Bible Study',
   sabbath_programme: 'Sabbath Programme',
   prayers: 'Prayer Requests',
   donations: 'Donations',
   events: 'Manage Events',
   sermons: 'Manage Sermons',
+  testimonies: 'Testimonies',
+  staff: 'Staff Directory',
+  forums: 'Forums',
+  hymns: 'Hymns Library',
   audit: 'Audit Trail',
   projects: 'Manage Projects',
   gallery: 'Manage Gallery',
   lessons: 'Lesson Videos',
 };
 
+// --- 4 Department Access Presets ---
+const DEPARTMENT_PRESETS: Array<{
+  role: string;
+  label: string;
+  icon: string;
+  description: string;
+  color: string;
+  sections: string[];
+}> = [
+  {
+    role: 'church_clerk',
+    label: 'Church Clerk',
+    icon: '??',
+    description: 'Announcements, events, Sabbath programme & Bible studies.',
+    color: '#0891b2',
+    sections: ['announcements', 'events', 'bible_studies', 'sabbath_programme'],
+  },
+  {
+    role: 'communication',
+    label: 'Communication Department',
+    icon: '??',
+    description: 'Blog posts, announcements, gallery, lesson videos, testimonies & sermons.',
+    color: '#7c3aed',
+    sections: ['blog', 'announcements', 'gallery', 'lessons', 'testimonies', 'sermons'],
+  },
+  {
+    role: 'evangelistic',
+    label: 'Evangelistic Department',
+    icon: '??',
+    description: 'Bible studies, community outreach, go back to school, prayer requests & forums.',
+    color: '#059669',
+    sections: ['bible_studies', 'community_outreach', 'go_back_to_school', 'prayers', 'forums'],
+  },
+  {
+    role: 'deaconery',
+    label: 'Deaconery Department',
+    icon: '??',
+    description: 'Events management, donations, staff directory & church projects.',
+    color: '#d97706',
+    sections: ['events', 'donations', 'staff', 'projects'],
+  },
+  {
+    role: 'church_leaders',
+    label: 'Church Leaders',
+    icon: '?',
+    description: 'Full ministry oversight � access to all departments and sections.',
+    color: '#1e3a8a',
+    sections: [
+      'blog', 'announcements', 'gallery', 'lessons', 'testimonies', 'sermons',
+      'bible_studies', 'community_outreach', 'go_back_to_school', 'prayers', 'forums',
+      'events', 'donations', 'staff', 'projects',
+      'sabbath_programme', 'hymns', 'audit',
+    ],
+  },
+];
+
 type SabbathProgrammeForm = {
   date: string;
   theme: string;
   sabbathSchoolTime: string;
   superintendent: string;
-  assistantSuperintendent: string;
-  secretary: string;
-  sabbathSchoolSongLeader: string;
-  sabbathSchoolOpeningPrayer: string;
   lessonTitle: string;
   lessonNumber: number;
-  quarter: string;
-  memoryVerse: string;
-  memoryVerseRef: string;
-  discussionLeader: string;
-  lessonLeader: string;
-  missionSpotlight: string;
-  offeringDesignation: string;
-  openingSongs: string;
-  dailyReadings: string;
-  classes: string;
   divineServiceTime: string;
-  divineSongLeader: string;
-  divineOpeningPrayer: string;
-  organist: string;
-  worshipCoordinator: string;
-  tithesOffering: string;
-  welcomeAndAnnouncements: string;
+  songLeader: string;
+  openingPrayer: string;
   sermonPreacher: string;
   sermonTitle: string;
   sermonKeyText: string;
   sermonSynopsis: string;
   sermonRole: string;
-  hymns: string;
-  specialItems: string;
   closingPrayer: string;
   benediction: string;
   afternoonTime: string;
   afternoonLeader: string;
-  afternoonPrayerFocus: string;
-  afternoonPrayerPoints: string;
-  discussionTopic: string;
-  discussionText: string;
-  afternoonDiscussionLeader: string;
-  discussionSummary: string;
 };
 
-type StructuredEditorColumn = {
-  key: string;
-  label: string;
-  placeholder?: string;
+type CommunityOutreachForm = {
+  hero_title: string;
+  hero_subtitle: string;
+  stats: CommunityOutreachPageContent['stats'];
 };
 
-type StructuredEditorRow = Record<string, string>;
-
-const parseStructuredLines = (value: string) =>
-  value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-const buildStructuredRow = (columns: StructuredEditorColumn[]) =>
-  columns.reduce<StructuredEditorRow>((accumulator, column) => {
-    accumulator[column.key] = '';
-    return accumulator;
-  }, {});
-
-const StructuredRowsEditor = ({
-  columns,
-  value,
-  onChange,
-  parseRows,
-  serializeRows,
-  addLabel,
-  helperText,
-  disabled = false,
-}: {
-  columns: StructuredEditorColumn[];
-  value: string;
-  onChange: (value: string) => void;
-  parseRows: (value: string) => StructuredEditorRow[];
-  serializeRows: (rows: StructuredEditorRow[]) => string;
-  addLabel: string;
-  helperText?: string;
-  disabled?: boolean;
-}) => {
-  const parsedRows = parseRows(value);
-  const rows = parsedRows.length > 0 ? parsedRows : [buildStructuredRow(columns)];
-
-  const updateRow = (rowIndex: number, key: string, nextValue: string) => {
-    const nextRows = rows.map((row, index) =>
-      index === rowIndex ? { ...row, [key]: nextValue } : row
-    );
-    onChange(serializeRows(nextRows));
-  };
-
-  const addRow = () => {
-    onChange(serializeRows([...rows, buildStructuredRow(columns)]));
-  };
-
-  const removeRow = (rowIndex: number) => {
-    const nextRows = rows.filter((_, index) => index !== rowIndex);
-    onChange(serializeRows(nextRows.length > 0 ? nextRows : [buildStructuredRow(columns)]));
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      {rows.map((row, rowIndex) => (
-        <div key={rowIndex} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '0.85rem', background: '#fafafa' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`, gap: '0.75rem' }}>
-            {columns.map((column) => (
-              <div key={column.key} className="form-group" style={{ marginBottom: 0 }}>
-                <label style={{ fontSize: '0.78rem' }}>{column.label}</label>
-                <input
-                  type="text"
-                  value={row[column.key] || ''}
-                  onChange={(event) => updateRow(rowIndex, column.key, event.target.value)}
-                  placeholder={column.placeholder}
-                  disabled={disabled}
-                />
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Row {rowIndex + 1}</span>
-            <button
-              type="button"
-              className="btn btn-outline btn-small"
-              onClick={() => removeRow(rowIndex)}
-              disabled={disabled || rows.length === 1}
-            >
-              Remove Row
-            </button>
-          </div>
-        </div>
-      ))}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <button type="button" className="btn btn-outline btn-small" onClick={addRow} disabled={disabled}>
-          {addLabel}
-        </button>
-        {helperText && <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{helperText}</span>}
-      </div>
-    </div>
-  );
+type GoBackToSchoolForm = {
+  hero_title: string;
+  hero_subtitle: string;
+  overall_fundraising_title: string;
+  overall_fundraising_copy: string;
+  overall_stats: GoBackToSchoolPageContent['overall_stats'];
 };
 
-const formatOpeningSongs = (songs: { number: string; title: string }[]) =>
-  songs.map((song) => `${song.number} | ${song.title}`).join('\n');
+const toCommunityOutreachForm = (content: CommunityOutreachPageContent): CommunityOutreachForm => ({
+  hero_title: content.hero_title,
+  hero_subtitle: content.hero_subtitle,
+  stats: (content.stats.length >= 4 ? content.stats : DEFAULT_COMMUNITY_OUTREACH_CONTENT.stats).slice(0, 4),
+});
 
-const parseOpeningSongs = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [number, ...titleParts] = line.split('|');
-    return {
-      number: (number || '').trim(),
-      title: titleParts.join('|').trim(),
-    };
-  }).filter((item) => item.number || item.title);
-
-const formatDailyReadings = (items: { day: string; title: string; text: string }[]) =>
-  items.map((item) => `${item.day} | ${item.title} | ${item.text}`).join('\n');
-
-const parseDailyReadings = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [day, title, ...textParts] = line.split('|');
-    return {
-      day: (day || '').trim(),
-      title: (title || '').trim(),
-      text: textParts.join('|').trim(),
-    };
-  }).filter((item) => item.day || item.title || item.text);
-
-const formatClasses = (items: { name: string; ageRange: string; teacher: string; room: string }[]) =>
-  items.map((item) => `${item.name} | ${item.ageRange} | ${item.teacher} | ${item.room}`).join('\n');
-
-const parseClasses = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [name, ageRange, teacher, ...roomParts] = line.split('|');
-    return {
-      name: (name || '').trim(),
-      ageRange: (ageRange || '').trim(),
-      teacher: (teacher || '').trim(),
-      room: roomParts.join('|').trim(),
-    };
-  }).filter((item) => item.name || item.ageRange || item.teacher || item.room);
-
-const formatHymns = (items: { number: string; title: string; book: string; moment: string }[]) =>
-  items.map((item) => `${item.number} | ${item.title} | ${item.book} | ${item.moment}`).join('\n');
-
-const parseHymns = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [number, title, book, ...momentParts] = line.split('|');
-    return {
-      number: (number || '').trim(),
-      title: (title || '').trim(),
-      book: (book || '').trim(),
-      moment: momentParts.join('|').trim(),
-    };
-  }).filter((item) => item.number || item.title || item.book || item.moment);
-
-const formatSpecialItems = (items: { group: string; song: string; type: string; color: string }[]) =>
-  items.map((item) => `${item.group} | ${item.song} | ${item.type} | ${item.color}`).join('\n');
-
-const parseSpecialItems = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [group, song, type, ...colorParts] = line.split('|');
-    return {
-      group: (group || '').trim(),
-      song: (song || '').trim(),
-      type: (type || '').trim(),
-      color: colorParts.join('|').trim() || '#8B5CF6',
-    };
-  }).filter((item) => item.group || item.song || item.type || item.color);
-
-const serializeOpeningSongRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.number || '').trim()} | ${(row.title || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeDailyReadingRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.day || '').trim()} | ${(row.title || '').trim()} | ${(row.text || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeClassRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.name || '').trim()} | ${(row.ageRange || '').trim()} | ${(row.teacher || '').trim()} | ${(row.room || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeHymnRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.number || '').trim()} | ${(row.title || '').trim()} | ${(row.book || '').trim()} | ${(row.moment || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeSpecialItemRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.group || '').trim()} | ${(row.song || '').trim()} | ${(row.type || '').trim()} | ${(row.color || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeSingleValueRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => (row.value || '').trim())
-    .filter(Boolean)
-    .join('\n');
+const toGoBackToSchoolForm = (content: GoBackToSchoolPageContent): GoBackToSchoolForm => ({
+  hero_title: content.hero_title,
+  hero_subtitle: content.hero_subtitle,
+  overall_fundraising_title: content.overall_fundraising_title,
+  overall_fundraising_copy: content.overall_fundraising_copy,
+  overall_stats: (content.overall_stats.length >= 3 ? content.overall_stats : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.overall_stats).slice(0, 3),
+});
 
 const applySabbathProgrammeForm = (base: SabbathProgram, form: SabbathProgrammeForm): SabbathProgram => ({
   ...base,
@@ -569,32 +517,14 @@ const applySabbathProgrammeForm = (base: SabbathProgram, form: SabbathProgrammeF
     ...base.sabbathSchool,
     time: form.sabbathSchoolTime,
     superintendent: form.superintendent,
-    assistantSuperintendent: form.assistantSuperintendent,
-    secretary: form.secretary,
-    songLeader: form.sabbathSchoolSongLeader,
-    openingPrayer: form.sabbathSchoolOpeningPrayer,
     lessonTitle: form.lessonTitle,
     lessonNumber: Number(form.lessonNumber) || 1,
-    quarter: form.quarter,
-    memoryVerse: form.memoryVerse,
-    memoryVerseRef: form.memoryVerseRef,
-    discussionLeader: form.discussionLeader,
-    lessonLeader: form.lessonLeader,
-    missionSpotlight: form.missionSpotlight,
-    offeringDesignation: form.offeringDesignation,
-    openingSongs: parseOpeningSongs(form.openingSongs),
-    dailyReadings: parseDailyReadings(form.dailyReadings),
-    classes: parseClasses(form.classes),
   },
   divineService: {
     ...base.divineService,
     time: form.divineServiceTime,
-    songLeader: form.divineSongLeader,
-    openingPrayer: form.divineOpeningPrayer,
-    organist: form.organist,
-    worshipCoordinator: form.worshipCoordinator,
-    tithesOffering: form.tithesOffering,
-    welcomeAndAnnouncements: form.welcomeAndAnnouncements,
+    songLeader: form.songLeader,
+    openingPrayer: form.openingPrayer,
   },
   sermon: {
     ...base.sermon,
@@ -604,20 +534,12 @@ const applySabbathProgrammeForm = (base: SabbathProgram, form: SabbathProgrammeF
     synopsis: form.sermonSynopsis,
     role: form.sermonRole,
   },
-  hymns: parseHymns(form.hymns),
-  specialItems: parseSpecialItems(form.specialItems),
   closingPrayer: form.closingPrayer,
   benediction: form.benediction,
   afternoonProgramme: {
     ...base.afternoonProgramme,
     time: form.afternoonTime,
     leader: form.afternoonLeader,
-    prayerFocus: form.afternoonPrayerFocus,
-    prayerPoints: parseStructuredLines(form.afternoonPrayerPoints),
-    discussionTopic: form.discussionTopic,
-    discussionText: form.discussionText,
-    discussionLeader: form.afternoonDiscussionLeader,
-    discussionSummary: form.discussionSummary,
   },
 });
 
@@ -626,46 +548,20 @@ const toSabbathProgrammeForm = (programme: SabbathProgram): SabbathProgrammeForm
   theme: programme.theme,
   sabbathSchoolTime: programme.sabbathSchool.time,
   superintendent: programme.sabbathSchool.superintendent,
-  assistantSuperintendent: programme.sabbathSchool.assistantSuperintendent,
-  secretary: programme.sabbathSchool.secretary,
-  sabbathSchoolSongLeader: programme.sabbathSchool.songLeader,
-  sabbathSchoolOpeningPrayer: programme.sabbathSchool.openingPrayer,
   lessonTitle: programme.sabbathSchool.lessonTitle,
   lessonNumber: programme.sabbathSchool.lessonNumber,
-  quarter: programme.sabbathSchool.quarter,
-  memoryVerse: programme.sabbathSchool.memoryVerse,
-  memoryVerseRef: programme.sabbathSchool.memoryVerseRef,
-  discussionLeader: programme.sabbathSchool.discussionLeader,
-  lessonLeader: programme.sabbathSchool.lessonLeader,
-  missionSpotlight: programme.sabbathSchool.missionSpotlight,
-  offeringDesignation: programme.sabbathSchool.offeringDesignation,
-  openingSongs: formatOpeningSongs(programme.sabbathSchool.openingSongs),
-  dailyReadings: formatDailyReadings(programme.sabbathSchool.dailyReadings),
-  classes: formatClasses(programme.sabbathSchool.classes),
   divineServiceTime: programme.divineService.time,
-  divineSongLeader: programme.divineService.songLeader,
-  divineOpeningPrayer: programme.divineService.openingPrayer,
-  organist: programme.divineService.organist,
-  worshipCoordinator: programme.divineService.worshipCoordinator,
-  tithesOffering: programme.divineService.tithesOffering,
-  welcomeAndAnnouncements: programme.divineService.welcomeAndAnnouncements,
+  songLeader: programme.divineService.songLeader,
+  openingPrayer: programme.divineService.openingPrayer,
   sermonPreacher: programme.sermon.preacher,
   sermonTitle: programme.sermon.title,
   sermonKeyText: programme.sermon.keyText,
   sermonSynopsis: programme.sermon.synopsis,
   sermonRole: programme.sermon.role,
-  hymns: formatHymns(programme.hymns),
-  specialItems: formatSpecialItems(programme.specialItems),
   closingPrayer: programme.closingPrayer,
   benediction: programme.benediction,
   afternoonTime: programme.afternoonProgramme.time,
   afternoonLeader: programme.afternoonProgramme.leader,
-  afternoonPrayerFocus: programme.afternoonProgramme.prayerFocus,
-  afternoonPrayerPoints: programme.afternoonProgramme.prayerPoints.join('\n'),
-  discussionTopic: programme.afternoonProgramme.discussionTopic,
-  discussionText: programme.afternoonProgramme.discussionText,
-  afternoonDiscussionLeader: programme.afternoonProgramme.discussionLeader,
-  discussionSummary: programme.afternoonProgramme.discussionSummary,
 });
 
 // --- Initial Fallback Mock Data ---
@@ -896,7 +792,7 @@ const LESSON_VIDEOS = [
   { week: 4, title: "Week 4: Judgment and the Most Holy Place", date: "2026-07-25", youtubeId: "", desc: "Understanding the Day of Atonement, the cleansing of the sanctuary, and the work of our High Priest." },
 ];
 
-const DEFAULT_ENTRY_IS_ADMIN = typeof window !== 'undefined' && /\/admin\.html$/i.test(window.location.pathname);
+const IS_ADMIN_ENTRY = true;
 
 const PUBLIC_ROUTE_WHITELIST = new Set([
   'home',
@@ -934,16 +830,11 @@ const ADMIN_ROUTE_WHITELIST = new Set([
   'admin',
 ]);
 
-type AppEntryMode = 'public' | 'admin';
 
-interface AppProps {
-  entryMode?: AppEntryMode;
-}
 
-export default function App({ entryMode }: AppProps = {}) {
-  const isAdminEntry = entryMode ? entryMode === 'admin' : DEFAULT_ENTRY_IS_ADMIN;
-  const routeWhitelist = isAdminEntry ? ADMIN_ROUTE_WHITELIST : PUBLIC_ROUTE_WHITELIST;
-  const [currentRoute, setCurrentRoute] = useState(isAdminEntry ? 'admin' : 'home');
+export default function AdminPortalApp() {
+  const routeWhitelist = IS_ADMIN_ENTRY ? ADMIN_ROUTE_WHITELIST : PUBLIC_ROUTE_WHITELIST;
+  const [currentRoute, setCurrentRoute] = useState('admin');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileMenuSearch, setMobileMenuSearch] = useState('');
@@ -961,6 +852,7 @@ export default function App({ entryMode }: AppProps = {}) {
   const [events, setEvents] = useState<ChurchEvent[]>(DEFAULT_EVENTS);
   const [prayers, setPrayers] = useState<PrayerRequest[]>(DEFAULT_PRAYERS);
   const [bibleStudies, setBibleStudies] = useState<BibleStudy[]>([]);
+  const [selectedStudyGroup, setSelectedStudyGroup] = useState<'all' | 'unassigned' | string>('all');
   const [donations, setDonations] = useState<Donation[]>([]);
   const [testimonies, setTestimonies] = useState<TestimonyItem[]>([]);
   const [projects, setProjects] = useState<ChurchProject[]>(DEFAULT_PROJECTS);
@@ -975,7 +867,7 @@ export default function App({ entryMode }: AppProps = {}) {
   const [selectedGalleryAlbum, setSelectedGalleryAlbum] = useState('all');
   const [gallery, setGallery] = useState<GalleryImage[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
-  const [galleryCloudAvailable, setGalleryCloudAvailable] = useState(isSupabaseConfigured);
+  const [galleryCloudAvailable, setGalleryCloudAvailable] = useState(true);
   const [galleryUploadForm, setGalleryUploadForm] = useState({ title: '', album: 'Sabbath Worship' });
   const [galleryUploadFile, setGalleryUploadFile] = useState<File | null>(null);
   const [galleryUploading, setGalleryUploading] = useState(false);
@@ -984,7 +876,7 @@ export default function App({ entryMode }: AppProps = {}) {
   const [addLessonForm, setAddLessonForm] = useState({ week: '', title: '', date: '', youtube_id: '', desc: '' });
   const galleryFileRef = useRef<HTMLInputElement>(null);
 
-  // ── Weekly Discipleship State ──────────────────────────────────────────────
+  // -- Weekly Discipleship State ----------------------------------------------
   const getWeekKey = () => {
     const d = new Date();
     const jan1 = new Date(d.getFullYear(), 0, 1);
@@ -1031,13 +923,13 @@ export default function App({ entryMode }: AppProps = {}) {
   });
 
   const CHECKLIST_ITEMS = [
-    { id: 'sabbath', label: 'Attended Sabbath School', icon: '📖' },
-    { id: 'sermon', label: 'Listened to a Sermon', icon: '🎙️' },
-    { id: 'prayer', label: 'Personal Prayer Time', icon: '🙏' },
-    { id: 'devotion', label: 'Daily Devotion (5 Days)', icon: '📔' },
-    { id: 'verse', label: 'Memorized a Scripture Verse', icon: '✝️' },
-    { id: 'tithe', label: 'Returned Tithe & Offering', icon: '💰' },
-    { id: 'outreach', label: 'Shared Faith with Someone', icon: '🌍' },
+    { id: 'sabbath', label: 'Attended Sabbath School', icon: '??' },
+    { id: 'sermon', label: 'Listened to a Sermon', icon: '???' },
+    { id: 'prayer', label: 'Personal Prayer Time', icon: '??' },
+    { id: 'devotion', label: 'Daily Devotion (5 Days)', icon: '??' },
+    { id: 'verse', label: 'Memorized a Scripture Verse', icon: '??' },
+    { id: 'tithe', label: 'Returned Tithe & Offering', icon: '??' },
+    { id: 'outreach', label: 'Shared Faith with Someone', icon: '??' },
   ];
 
   const POLL_OPTIONS = ['Hebrews', 'Romans', 'Genesis', 'John'];
@@ -1091,7 +983,7 @@ export default function App({ entryMode }: AppProps = {}) {
     setPraiseWall(updated);
     localStorage.setItem('sic_praise_wall', JSON.stringify(updated));
     setPraiseForm({ name: '', text: '' });
-    toast.success('Praise added to the wall! 🙌');
+    toast.success('Praise added to the wall! ??');
   };
 
   const supportPrayer = (id: number) => {
@@ -1102,7 +994,7 @@ export default function App({ entryMode }: AppProps = {}) {
     setPrayerSupportedIds(updatedIds);
     localStorage.setItem('sic_prayer_support', JSON.stringify(updated));
     localStorage.setItem('sic_prayer_supported_ids', JSON.stringify(updatedIds));
-    toast.success('You are praying with this person! 🙏');
+    toast.success('You are praying with this person! ??');
   };
 
   const submitQuiz = () => {
@@ -1129,8 +1021,17 @@ export default function App({ entryMode }: AppProps = {}) {
   const [donationDrafts, setDonationDrafts] = useState<Record<number, Donation>>({});
 
   // Form input states
-  const [addEventForm, setAddEventForm] = useState({ title: '', date: '', location: '', desc: '' });
-  const [addSermonForm, setAddSermonForm] = useState({ title: '', speaker: '', date: '', passage: '', category: 'Sabbath Sermons' });
+  const [addEventForm, setAddEventForm] = useState({
+    title: '',
+    date: '',
+    location: '',
+    category: 'General',
+    capacity: '',
+    waitlist_enabled: true,
+    is_published: true,
+    desc: '',
+  });
+  const [addSermonForm, setAddSermonForm] = useState({ title: '', speaker: '', date: '', passage: '', category: 'Sabbath Sermons', youtube_id: '' });
   const [studyForm, setStudyForm] = useState({
     name: '',
     email: '',
@@ -1144,6 +1045,55 @@ export default function App({ entryMode }: AppProps = {}) {
     small_group_notes: '',
   });
   const [studyFormErrors, setStudyFormErrors] = useState<Record<string, string>>({});
+  const [bibleStudySearch, setBibleStudySearch] = useState('');
+  const [prayerSearch, setPrayerSearch] = useState('');
+  const [prayerStatusFilter, setPrayerStatusFilter] = useState<'all' | 'received' | 'assigned' | 'contacted' | 'ongoing' | 'completed'>('all');
+  const [expandedPrayerId, setExpandedPrayerId] = useState<number | null>(null);
+
+  // Donations
+  const [donationSearch, setDonationSearch] = useState('');
+  const [donationFundFilter, setDonationFundFilter] = useState('all');
+  const [showLogDonationForm, setShowLogDonationForm] = useState(false);
+  const [logDonationForm, setLogDonationForm] = useState({ amount: '', fund: 'Tithe', method: 'Mobile Money', status: 'Completed Stewardship' });
+
+  // Events
+  const [eventSearch, setEventSearch] = useState('');
+  const [eventTimeFilter, setEventTimeFilter] = useState<'all' | 'upcoming' | 'past'>('all');
+  const [eventCategoryFilter, setEventCategoryFilter] = useState('all');
+
+  // Sermons
+  const [sermonSearch, setSermonSearch] = useState('');
+  const [sermonCategoryFilter, setSermonCategoryFilter] = useState('all');
+
+  // Testimonies
+  const [testimonySearch, setTestimonySearch] = useState('');
+
+  // Bible Discussion Groups
+  interface BibleDiscussionGroup {
+    id?: number;
+    name: string;
+    topic: string;
+    meeting_day: string;
+    meeting_time: string;
+    format: '' | 'in_person' | 'online' | 'hybrid';
+    leader_name: string;
+    description: string;
+    max_members: number | null;
+    is_active: boolean;
+    member_count?: number;
+    created_at?: string;
+  }
+  const [discussionGroups, setDiscussionGroups] = useState<BibleDiscussionGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState('');
+  const [showGroupForm, setShowGroupForm] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
+  const [groupForm, setGroupForm] = useState<BibleDiscussionGroup>({
+    name: '', topic: '', meeting_day: '', meeting_time: '',
+    format: '', leader_name: '', description: '', max_members: null, is_active: true,
+  });
+  const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null);
+  const [groupMembers, setGroupMembers] = useState<Record<number, BibleStudy[]>>({});
   const [studySubmitting, setStudySubmitting] = useState(false);
   const [prayerForm, setPrayerForm] = useState<{
     name: string;
@@ -1212,16 +1162,90 @@ export default function App({ entryMode }: AppProps = {}) {
   const [projectHistoryById, setProjectHistoryById] = useState<Record<number, ProjectHistoryEntry[]>>({});
   const [openProjectHistoryId, setOpenProjectHistoryId] = useState<number | null>(null);
   const [projectHistoryFilter, setProjectHistoryFilter] = useState<ProjectHistoryActionFilter>('all');
+  const [projectEditOpenIds, setProjectEditOpenIds] = useState<Set<number>>(new Set());
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projectCategoryFilter, setProjectCategoryFilter] = useState('All');
+  const [projectStatusFilter, setProjectStatusFilter] = useState('All');
   const [adminAuditEntries, setAdminAuditEntries] = useState<AdminAuditEntry[]>([]);
   const [adminAuditLoading, setAdminAuditLoading] = useState(false);
   const [adminAuditError, setAdminAuditError] = useState('');
   const [adminAuditActionFilter, setAdminAuditActionFilter] = useState<AdminAuditActionFilter>('all');
   const [adminAuditResourceFilter, setAdminAuditResourceFilter] = useState('');
+  const [adminTestimonyFilter, setAdminTestimonyFilter] = useState<AdminTestimonyFilter>('pending');
+  const [adminTestimonyActionId, setAdminTestimonyActionId] = useState<number | null>(null);
+
+  const [staffDirectory, setStaffDirectory] = useState<StaffDirectoryRecord[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffError, setStaffError] = useState('');
+  const [editingStaffId, setEditingStaffId] = useState<number | null>(null);
+  const [staffForm, setStaffForm] = useState({
+    user: '',
+    position: '',
+    department: '',
+    bio: '',
+    photo: '',
+    email: '',
+    phone: '',
+    order: '0',
+  });
+
+  const [, setForumCategories] = useState<ForumCategoryRecord[]>([]);
+  const [forumThreads, setForumThreads] = useState<ForumThreadRecord[]>([]);
+  const [forumsLoading, setForumsLoading] = useState(false);
+  const [forumsError, setForumsError] = useState('');
+  const [newForumCategory, setNewForumCategory] = useState({ name: '', description: '' });
+
+  const [hymnBooks, setHymnBooks] = useState<HymnBookRecord[]>([]);
+  const [hymns, setHymns] = useState<HymnRecord[]>([]);
+  const [selectedHymnBookId, setSelectedHymnBookId] = useState<number | 'all'>('all');
+  const [hymnsLoading, setHymnsLoading] = useState(false);
+  const [hymnsError, setHymnsError] = useState('');
+  const [newHymnBook, setNewHymnBook] = useState({ title: '', abbreviation: '', publisher: '', year: '', hymn_count: '0', is_featured: false });
+  const [newHymn, setNewHymn] = useState({ hymn_book: '', number: '', title: '', author: '', theme: '', composer: '', lyrics: '' });
+
+  // Blog Posts
+  interface BlogPostAdmin {
+    id: number;
+    title: string;
+    slug: string;
+    content: string;
+    category: string;
+    featured_image: string;
+    is_published: boolean;
+    action_required?: boolean;
+    cta_text?: string;
+    cta_link?: string;
+    audience?: string;
+    created_at: string;
+    author_name?: string;
+  }
+  const [blogPosts, setBlogPosts] = useState<BlogPostAdmin[]>([]);
+  const [blogPostsLoading, setBlogPostsLoading] = useState(false);
+  const [blogPostsError, setBlogPostsError] = useState('');
+  const [editingBlogId, setEditingBlogId] = useState<number | null>(null);
+  const [blogDrafts, setBlogDrafts] = useState<Record<number, Partial<BlogPostAdmin>>>({});
+  const [showAddBlogForm, setShowAddBlogForm] = useState(false);
+  const [blogSearch, setBlogSearch] = useState('');
+  const [blogCatFilter, setBlogCatFilter] = useState('all');
+  const [blogStatusFilter, setBlogStatusFilter] = useState('all');
+  const [addBlogForm, setAddBlogForm] = useState({
+    title: '',
+    content: '',
+    category: 'news',
+    featured_image: '',
+    is_published: true,
+    action_required: false,
+    cta_text: '',
+    cta_link: '',
+    audience: '',
+  });
 
   // Alerts
   const [studySuccess] = useState(false);
+  const [prayerSuccess] = useState(false);
   const [donationSuccess] = useState(false);
   const [eventRegSuccess] = useState(false);
+  const [contactSuccess] = useState(false);
 
   const studyNameLength = studyForm.name.trim().length;
   const studyCountryLength = studyForm.country.trim().length;
@@ -1235,16 +1259,16 @@ export default function App({ entryMode }: AppProps = {}) {
     && Boolean(studyForm.course.trim())
     && (studyForm.registration_type !== 'small_group' || Boolean(studyForm.preferred_meeting_day.trim()));
 
+  const isPrayerFormValid = prayerForm.content.trim().length >= 10
+    && prayerForm.content.length <= 2000
+    && (!prayerForm.name.trim() || prayerForm.name.trim().length <= 100);
+
   const testimonyTitleLength = testimonyForm.title.trim().length;
   const testimonyContentLength = testimonyForm.content.trim().length;
   const isTestimonyFormValid = testimonyTitleLength >= TESTIMONY_TITLE_MIN
     && testimonyTitleLength <= TESTIMONY_TITLE_MAX
     && testimonyContentLength >= TESTIMONY_CONTENT_MIN
     && testimonyContentLength <= TESTIMONY_CONTENT_MAX;
-  const isPrayerFormValid = prayerForm.content.trim().length >= 10
-    && prayerForm.content.length <= 2000
-    && (!prayerForm.name.trim() || prayerForm.name.trim().length <= 100);
-  const [contactSuccess] = useState(false);
 
   // Chat Feed Sim
   const [chatMessages, setChatMessages] = useState([
@@ -1261,6 +1285,16 @@ export default function App({ entryMode }: AppProps = {}) {
   const [sabbathProgramForm, setSabbathProgramForm] = useState<SabbathProgrammeForm>(() =>
     toSabbathProgrammeForm(DEFAULT_SABBATH_PROGRAMMES[0])
   );
+  const [communityOutreachForm, setCommunityOutreachForm] = useState<CommunityOutreachForm>(() =>
+    toCommunityOutreachForm(DEFAULT_COMMUNITY_OUTREACH_CONTENT)
+  );
+  const [communityOutreachEditor, setCommunityOutreachEditor] = useState(JSON.stringify(DEFAULT_COMMUNITY_OUTREACH_CONTENT, null, 2));
+  const [communityOutreachError, setCommunityOutreachError] = useState('');
+  const [goBackToSchoolForm, setGoBackToSchoolForm] = useState<GoBackToSchoolForm>(() =>
+    toGoBackToSchoolForm(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT)
+  );
+  const [goBackToSchoolEditor, setGoBackToSchoolEditor] = useState(JSON.stringify(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT, null, 2));
+  const [goBackToSchoolError, setGoBackToSchoolError] = useState('');
 
   // Admin Panel states
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTabId>('admin-stats');
@@ -1322,19 +1356,19 @@ export default function App({ entryMode }: AppProps = {}) {
 
   // Announcements
   const [announcements, setAnnouncements] = useState<Announcement[]>([
-    { id: 1, title: "Baptism Service — This Sabbath", body: "We will have a special baptism service this Sabbath, 19th July. All baptismal candidates should arrive by 8:30 AM for final preparation.", date: "2026-07-17", priority: "high", icon: "💧" },
-    { id: 2, title: "Church Choir Practice", body: "All choir members are reminded of the special combined rehearsal on Thursday evening at 6:00 PM in the main sanctuary. International Choir to attend.", date: "2026-07-16", priority: "normal", icon: "🎶" },
-    { id: 3, title: "Mid-Year Thanksgiving Offering", body: "The 2nd quarter special project offering will be received this Sabbath. You can also give via mobile money or bank transfer. God bless your stewardship.", date: "2026-07-15", priority: "high", icon: "🙌" },
-    { id: 4, title: "Campus Outreach — Luwero District", body: "Youth volunteers needed for our community health outreach this coming Sunday. Contact Brother Timothy Omondi to register. Transport will be provided.", date: "2026-07-14", priority: "normal", icon: "🌍" },
-    { id: 5, title: "Pathfinder Club Investiture", body: "Pathfinder and Adventurer Club Investiture ceremony is scheduled for Saturday afternoon at 3:00 PM. Parents and guardians are invited to attend.", date: "2026-07-13", priority: "normal", icon: "⭐" },
-    { id: 6, title: "New Member Orientation", body: "Welcome to all new members! A special orientation session will be held next Sabbath after the afternoon service. Light refreshments will be served.", date: "2026-07-12", priority: "low", icon: "👋" },
+    { id: 1, title: "Baptism Service � This Sabbath", body: "We will have a special baptism service this Sabbath, 19th July. All baptismal candidates should arrive by 8:30 AM for final preparation.", date: "2026-07-17", priority: "high", icon: "??" },
+    { id: 2, title: "Church Choir Practice", body: "All choir members are reminded of the special combined rehearsal on Thursday evening at 6:00 PM in the main sanctuary. International Choir to attend.", date: "2026-07-16", priority: "normal", icon: "??" },
+    { id: 3, title: "Mid-Year Thanksgiving Offering", body: "The 2nd quarter special project offering will be received this Sabbath. You can also give via mobile money or bank transfer. God bless your stewardship.", date: "2026-07-15", priority: "high", icon: "??" },
+    { id: 4, title: "Campus Outreach � Luwero District", body: "Youth volunteers needed for our community health outreach this coming Sunday. Contact Brother Timothy Omondi to register. Transport will be provided.", date: "2026-07-14", priority: "normal", icon: "??" },
+    { id: 5, title: "Pathfinder Club Investiture", body: "Pathfinder and Adventurer Club Investiture ceremony is scheduled for Saturday afternoon at 3:00 PM. Parents and guardians are invited to attend.", date: "2026-07-13", priority: "normal", icon: "?" },
+    { id: 6, title: "New Member Orientation", body: "Welcome to all new members! A special orientation session will be held next Sabbath after the afternoon service. Light refreshments will be served.", date: "2026-07-12", priority: "low", icon: "??" },
   ]);
   const [addAnnouncementForm, setAddAnnouncementForm] = useState({
     title: '',
     body: '',
     date: '',
     priority: 'normal',
-    icon: '📣',
+    icon: '??',
     is_published: true,
   });
   const getRouteFromHash = (): string | null => {
@@ -1345,7 +1379,7 @@ export default function App({ entryMode }: AppProps = {}) {
 
   useEffect(() => {
     const syncRouteFromHash = () => {
-      if (isAdminEntry) {
+      if (IS_ADMIN_ENTRY) {
         setCurrentRoute((prev) => (prev === 'admin' ? prev : 'admin'));
         if (window.location.hash.replace(/^#\/?/, '').trim().toLowerCase() !== 'admin') {
           window.history.replaceState(null, '', '#/admin');
@@ -1364,7 +1398,7 @@ export default function App({ entryMode }: AppProps = {}) {
   }, []);
 
   useEffect(() => {
-    if (isAdminEntry && currentRoute !== 'admin') {
+    if (IS_ADMIN_ENTRY && currentRoute !== 'admin') {
       setCurrentRoute('admin');
       return;
     }
@@ -1376,7 +1410,7 @@ export default function App({ entryMode }: AppProps = {}) {
   }, [currentRoute]);
 
   useEffect(() => {
-    if (isAdminEntry) {
+    if (IS_ADMIN_ENTRY) {
       if (window.location.hash.replace(/^#\/?/, '').trim().toLowerCase() !== 'admin') {
         window.history.replaceState(null, '', '#/admin');
       }
@@ -1397,20 +1431,32 @@ export default function App({ entryMode }: AppProps = {}) {
     };
   }, []);
 
-  // --- API Sync on Load ---
+  // --- API Sync on Load (public endpoints only) ---
   useEffect(() => {
     fetchSermons();
     fetchEvents();
     fetchPrayers();
-    fetchBibleStudies();
-    fetchDonations();
     fetchTestimonies();
     fetchProjects();
     fetchGallery();
     fetchLessonVideos();
     fetchSabbathProgrammes();
+    fetchCommunityOutreachPage();
+    fetchGoBackToSchoolPage();
     fetchAnnouncements();
+    fetchStaffDirectory();
+    fetchForumsAdmin();
+    fetchHymnsAdmin();
   }, []);
+
+  // --- Admin-only API Sync (requires authentication) ---
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+    fetchBibleStudies();
+    fetchDonations();
+    fetchBlogPosts();
+    fetchDiscussionGroups();
+  }, [isAdminAuthenticated]);
 
   // Pre-fill donation fund when navigating to Give from a project
   useEffect(() => {
@@ -1635,6 +1681,23 @@ export default function App({ entryMode }: AppProps = {}) {
     return headers;
   };
 
+  const uploadProjectImage = async (file: File): Promise<string> => {
+    const adminToken = localStorage.getItem('admin_token');
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await fetch(`${API_URL}/upload/image/`, {
+      method: 'POST',
+      headers: adminToken ? { Authorization: `Token ${adminToken}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Upload failed');
+    }
+    const data = await res.json();
+    return (data as { url: string }).url;
+  };
+
   const normalizeEditorialText = (text: string): string => {
     return text
       .replace(/\bSeatle\b/gi, 'Seattle')
@@ -1658,17 +1721,30 @@ export default function App({ entryMode }: AppProps = {}) {
     title: normalizeEditorialText(item.title),
     location: normalizeEditorialText(item.location),
     desc: normalizeEditorialText(item.desc),
+    category: normalizeEditorialText(item.category || 'General'),
+    capacity: item.capacity ?? null,
+    waitlist_enabled: item.waitlist_enabled !== false,
+    is_published: item.is_published !== false,
   });
 
   const openEventEditor = (item: ChurchEvent) => {
     setEditingEventId(item.id);
-    setAddEventForm({ title: item.title, date: item.date, location: item.location, desc: item.desc });
+    setAddEventForm({
+      title: item.title,
+      date: item.date,
+      location: item.location,
+      category: item.category || 'General',
+      capacity: item.capacity === null || item.capacity === undefined ? '' : String(item.capacity),
+      waitlist_enabled: item.waitlist_enabled !== false,
+      is_published: item.is_published !== false,
+      desc: item.desc,
+    });
     setShowAddEventModal(true);
   };
 
   const openSermonEditor = (item: Sermon) => {
     setEditingSermonId(item.id);
-    setAddSermonForm({ title: item.title, speaker: item.speaker, date: item.date, passage: item.passage, category: item.category });
+    setAddSermonForm({ title: item.title, speaker: item.speaker, date: item.date, passage: item.passage, category: item.category, youtube_id: item.youtube_id || '' });
     setShowAddSermonModal(true);
   };
 
@@ -1705,9 +1781,11 @@ export default function App({ entryMode }: AppProps = {}) {
     }
   };
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (adminMode = false) => {
     try {
-      const res = await fetch(`${API_URL}/events/`);
+      const res = await fetch(`${API_URL}/events/`, {
+        headers: adminMode ? getAdminAuthHeaders() : undefined,
+      });
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.results ?? []);
@@ -1733,7 +1811,9 @@ export default function App({ entryMode }: AppProps = {}) {
 
   const fetchBibleStudies = async () => {
     try {
-      const res = await fetch(`${API_URL}/bible-studies/`);
+      const res = await fetch(`${API_URL}/bible-studies/`, {
+        headers: getAdminAuthHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.results ?? []);
@@ -1742,6 +1822,82 @@ export default function App({ entryMode }: AppProps = {}) {
     } catch {
       // Local fallback
     }
+  };
+
+  const fetchDiscussionGroups = async () => {
+    setGroupsLoading(true);
+    setGroupsError('');
+    try {
+      const res = await fetch(`${API_URL}/bible-study-groups/`, { headers: getAdminAuthHeaders() });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setDiscussionGroups(Array.isArray(data) ? data : (data.results ?? []));
+    } catch {
+      setGroupsError('Unable to load discussion groups.');
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
+
+  const fetchGroupMembers = async (groupId: number, groupName: string) => {
+    try {
+      const res = await fetch(`${API_URL}/bible-study-groups/${groupId}/members/`, { headers: getAdminAuthHeaders() });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setGroupMembers(prev => ({ ...prev, [groupId]: Array.isArray(data) ? data : [] }));
+    } catch {
+      setGroupMembers(prev => ({ ...prev, [groupId]: [] }));
+    }
+  };
+
+  const handleSaveGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!groupForm.name.trim()) { toast.error('Group name is required.'); return; }
+    const url = editingGroupId ? `${API_URL}/bible-study-groups/${editingGroupId}/` : `${API_URL}/bible-study-groups/`;
+    const method = editingGroupId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method, headers: getAdminAuthHeaders(),
+      body: JSON.stringify({ ...groupForm, max_members: groupForm.max_members || null }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast.error(d?.name?.[0] || d?.detail || 'Could not save group.'); return;
+    }
+    setGroupForm({ name: '', topic: '', meeting_day: '', meeting_time: '', format: '', leader_name: '', description: '', max_members: null, is_active: true });
+    setEditingGroupId(null);
+    setShowGroupForm(false);
+    await fetchDiscussionGroups();
+    toast.success(editingGroupId ? 'Group updated.' : 'Discussion group created.');
+  };
+
+  const handleDeleteGroup = async (id: number) => {
+    if (!window.confirm('Delete this discussion group?')) return;
+    const res = await fetch(`${API_URL}/bible-study-groups/${id}/`, { method: 'DELETE', headers: getAdminAuthHeaders() });
+    if (!res.ok) { toast.error('Could not delete group.'); return; }
+    await fetchDiscussionGroups();
+    toast.success('Group deleted.');
+  };
+
+  const handleRemoveMemberFromGroup = async (groupId: number, memberId: number) => {
+    const res = await fetch(`${API_URL}/bible-study-groups/${groupId}/remove_member/`, {
+      method: 'POST', headers: getAdminAuthHeaders(),
+      body: JSON.stringify({ member_id: memberId }),
+    });
+    if (!res.ok) { toast.error('Could not remove member.'); return; }
+    await fetchGroupMembers(groupId, '');
+    await fetchBibleStudies();
+    toast.success('Member removed from group.');
+  };
+
+  const handleAssignMemberToGroup = async (groupId: number, memberId: number) => {
+    const res = await fetch(`${API_URL}/bible-study-groups/${groupId}/assign_member/`, {
+      method: 'POST', headers: getAdminAuthHeaders(),
+      body: JSON.stringify({ member_id: memberId }),
+    });
+    if (!res.ok) { toast.error('Could not assign member.'); return; }
+    await fetchGroupMembers(groupId, '');
+    await fetchBibleStudies();
+    toast.success('Member assigned to group.');
   };
 
   const fetchDonations = async () => {
@@ -1803,7 +1959,7 @@ export default function App({ entryMode }: AppProps = {}) {
       date: item.scheduled_publish ? String(item.scheduled_publish).slice(0, 10) : (item.created_at ? String(item.created_at).slice(0, 10) : ''),
       scheduled_publish: item.scheduled_publish ? String(item.scheduled_publish).slice(0, 10) : '',
       priority: (item.priority as 'high' | 'normal' | 'low') || priorityFromCategory,
-      icon: item.featured_image || '📣',
+      icon: item.featured_image || '??',
       slug: item.slug,
       is_published: item.is_published,
     };
@@ -1867,6 +2023,348 @@ export default function App({ entryMode }: AppProps = {}) {
     } finally {
       setAdminAuditLoading(false);
     }
+  };
+
+  const fetchStaffDirectory = async (adminMode = false) => {
+    setStaffLoading(true);
+    setStaffError('');
+    try {
+      const res = await fetch(`${API_URL}/staff/`, {
+        headers: adminMode ? getAdminAuthHeaders() : undefined,
+      });
+      if (!res.ok) {
+        throw new Error('Could not load staff directory.');
+      }
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      setStaffDirectory(list);
+    } catch {
+      setStaffError('Unable to load staff directory records.');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  const saveStaffRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staffForm.user.trim() || !staffForm.position.trim() || !staffForm.department.trim() || !staffForm.bio.trim() || !staffForm.email.trim()) {
+      toast.error('User ID, position, department, bio, photo, and email are required.');
+      return;
+    }
+
+    const payload = {
+      user: Number(staffForm.user),
+      position: staffForm.position,
+      department: staffForm.department,
+      bio: staffForm.bio,
+      photo: staffForm.photo,
+      email: staffForm.email,
+      phone: staffForm.phone,
+      order: Number(staffForm.order || 0),
+    };
+
+    const url = editingStaffId ? `${API_URL}/staff/${editingStaffId}/` : `${API_URL}/staff/`;
+    const method = editingStaffId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data?.detail || data?.error || 'Could not save staff record.');
+      return;
+    }
+
+    setStaffForm({ user: '', position: '', department: '', bio: '', photo: '', email: '', phone: '', order: '0' });
+    setEditingStaffId(null);
+    await fetchStaffDirectory(true);
+    toast.success('Staff record saved.');
+  };
+
+  const removeStaffRecord = async (id: number) => {
+    if (!window.confirm('Delete this staff profile?')) return;
+    const res = await fetch(`${API_URL}/staff/${id}/`, {
+      method: 'DELETE',
+      headers: getAdminAuthHeaders(),
+    });
+    if (!res.ok) {
+      toast.error('Could not delete staff profile.');
+      return;
+    }
+    await fetchStaffDirectory(true);
+    toast.success('Staff profile removed.');
+  };
+
+  const fetchForumsAdmin = async () => {
+    setForumsLoading(true);
+    setForumsError('');
+    try {
+      const [catRes, threadRes] = await Promise.all([
+        fetch(`${API_URL}/forum-categories/`),
+        fetch(`${API_URL}/forum-threads/`),
+      ]);
+
+      if (!catRes.ok || !threadRes.ok) {
+        throw new Error('Could not load forum data.');
+      }
+
+      const catData = await catRes.json();
+      const threadData = await threadRes.json();
+      const catList = Array.isArray(catData) ? catData : (catData.results ?? []);
+      const threadList = Array.isArray(threadData) ? threadData : (threadData.results ?? []);
+      const catMap = new globalThis.Map<number, string>(catList.map((item: ForumCategoryRecord) => [item.id, item.name]));
+
+      setForumCategories(catList);
+      setForumThreads(threadList.map((item: any) => ({
+        ...item,
+        category_name: catMap.get(item.category) || 'Unknown',
+      })));
+    } catch {
+      setForumsError('Unable to load forums data.');
+    } finally {
+      setForumsLoading(false);
+    }
+  };
+
+  const createForumCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newForumCategory.name.trim() || !newForumCategory.description.trim()) {
+      toast.error('Forum category name and description are required.');
+      return;
+    }
+    const res = await fetch(`${API_URL}/forum-categories/`, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(newForumCategory),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data?.detail || data?.error || 'Could not create forum category.');
+      return;
+    }
+    setNewForumCategory({ name: '', description: '' });
+    await fetchForumsAdmin();
+    toast.success('Forum category created.');
+  };
+
+  const updateForumThreadState = async (thread: ForumThreadRecord, patch: Partial<Pick<ForumThreadRecord, 'pinned' | 'closed'>>) => {
+    const res = await fetch(`${API_URL}/forum-threads/${thread.id}/`, {
+      method: 'PATCH',
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      toast.error('Could not update forum thread.');
+      return;
+    }
+    await fetchForumsAdmin();
+  };
+
+  const removeForumThread = async (threadId: number) => {
+    if (!window.confirm('Delete this thread?')) return;
+    const res = await fetch(`${API_URL}/forum-threads/${threadId}/`, {
+      method: 'DELETE',
+      headers: getAdminAuthHeaders(),
+    });
+    if (!res.ok) {
+      toast.error('Could not delete thread.');
+      return;
+    }
+    await fetchForumsAdmin();
+  };
+
+  const fetchHymnsAdmin = async () => {
+    setHymnsLoading(true);
+    setHymnsError('');
+    try {
+      const [bookRes, hymnRes] = await Promise.all([
+        fetch(`${API_URL}/hymn-books/`),
+        fetch(`${API_URL}/hymns/`),
+      ]);
+
+      if (!bookRes.ok || !hymnRes.ok) {
+        throw new Error('Could not load hymn data.');
+      }
+
+      const bookData = await bookRes.json();
+      const hymnData = await hymnRes.json();
+      const books = Array.isArray(bookData) ? bookData : (bookData.results ?? []);
+      const hymnList = Array.isArray(hymnData) ? hymnData : (hymnData.results ?? []);
+      setHymnBooks(books);
+      setHymns(hymnList);
+    } catch {
+      setHymnsError('Unable to load hymns library data.');
+    } finally {
+      setHymnsLoading(false);
+    }
+  };
+
+  const createHymnBook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHymnBook.title.trim() || !newHymnBook.abbreviation.trim()) {
+      toast.error('Book title and abbreviation are required.');
+      return;
+    }
+
+    const payload = {
+      title: newHymnBook.title,
+      abbreviation: newHymnBook.abbreviation,
+      publisher: newHymnBook.publisher,
+      year: newHymnBook.year ? Number(newHymnBook.year) : null,
+      hymn_count: Number(newHymnBook.hymn_count || 0),
+      is_featured: newHymnBook.is_featured,
+      description: '',
+    };
+
+    const res = await fetch(`${API_URL}/hymn-books/`, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data?.detail || data?.error || 'Could not create hymn book.');
+      return;
+    }
+
+    setNewHymnBook({ title: '', abbreviation: '', publisher: '', year: '', hymn_count: '0', is_featured: false });
+    await fetchHymnsAdmin();
+    toast.success('Hymn book created.');
+  };
+
+  const createHymn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHymn.hymn_book || !newHymn.number || !newHymn.title.trim() || !newHymn.lyrics.trim()) {
+      toast.error('Book, number, title, and lyrics are required to create a hymn.');
+      return;
+    }
+
+    const payload = {
+      hymn_book: Number(newHymn.hymn_book),
+      number: Number(newHymn.number),
+      title: newHymn.title,
+      author: newHymn.author,
+      composer: newHymn.composer,
+      lyrics: newHymn.lyrics,
+      theme: newHymn.theme,
+      tune_name: '',
+      audio_url: '',
+    };
+
+    const res = await fetch(`${API_URL}/hymns/`, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data?.detail || data?.error || 'Could not create hymn.');
+      return;
+    }
+
+    setNewHymn({ hymn_book: '', number: '', title: '', author: '', theme: '', composer: '', lyrics: '' });
+    await fetchHymnsAdmin();
+    toast.success('Hymn created.');
+  };
+
+  const removeHymn = async (id: number) => {
+    if (!window.confirm('Delete this hymn?')) return;
+    const res = await fetch(`${API_URL}/hymns/${id}/`, {
+      method: 'DELETE',
+      headers: getAdminAuthHeaders(),
+    });
+    if (!res.ok) {
+      toast.error('Could not delete hymn.');
+      return;
+    }
+    await fetchHymnsAdmin();
+    toast.success('Hymn deleted.');
+  };
+
+  // --- Blog Posts Admin CRUD ---
+  const fetchBlogPosts = async () => {
+    setBlogPostsLoading(true);
+    setBlogPostsError('');
+    try {
+      const res = await fetch(`${API_URL}/blog/`, { headers: getAdminAuthHeaders() });
+      if (!res.ok) throw new Error('Could not load blog posts.');
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      setBlogPosts(list);
+    } catch {
+      setBlogPostsError('Unable to load blog posts.');
+    } finally {
+      setBlogPostsLoading(false);
+    }
+  };
+
+  const handleCreateBlogPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addBlogForm.title.trim() || !addBlogForm.content.trim()) {
+      toast.error('Title and content are required.');
+      return;
+    }
+    const res = await fetch(`${API_URL}/blog/`, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(addBlogForm),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data?.error || data?.detail || 'Could not create blog post.');
+      return;
+    }
+    setAddBlogForm({ title: '', content: '', category: 'news', featured_image: '', is_published: true, action_required: false, cta_text: '', cta_link: '', audience: '' });
+    await fetchBlogPosts();
+    toast.success('Blog post created.');
+  };
+
+  const handleUpdateBlogPost = async (id: number) => {
+    const draft = blogDrafts[id];
+    if (!draft) return;
+    const res = await fetch(`${API_URL}/blog/${id}/`, {
+      method: 'PATCH',
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(draft),
+    });
+    if (!res.ok) {
+      toast.error('Could not update blog post.');
+      return;
+    }
+    setEditingBlogId(null);
+    setBlogDrafts((prev) => { const next = { ...prev }; delete next[id]; return next; });
+    await fetchBlogPosts();
+    toast.success('Blog post updated.');
+  };
+
+  const handleDeleteBlogPost = async (id: number) => {
+    if (!window.confirm('Delete this blog post?')) return;
+    const res = await fetch(`${API_URL}/blog/${id}/`, {
+      method: 'DELETE',
+      headers: getAdminAuthHeaders(),
+    });
+    if (!res.ok) {
+      toast.error('Could not delete blog post.');
+      return;
+    }
+    await fetchBlogPosts();
+    toast.success('Blog post deleted.');
+  };
+
+  const handleToggleBlogPublished = async (post: { id: number; is_published: boolean }) => {
+    const res = await fetch(`${API_URL}/blog/${post.id}/`, {
+      method: 'PATCH',
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify({ is_published: !post.is_published }),
+    });
+    if (!res.ok) {
+      toast.error('Could not update publish status.');
+      return;
+    }
+    await fetchBlogPosts();
+    toast.success(post.is_published ? 'Post unpublished.' : 'Post published.');
   };
 
   const fetchAdminAccounts = async () => {
@@ -2119,6 +2617,111 @@ export default function App({ entryMode }: AppProps = {}) {
     }
   };
 
+  const normalizeCommunityOutreachPage = (item: any): CommunityOutreachPageContent | null => {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    return {
+      page_key: typeof item.page_key === 'string' ? item.page_key : DEFAULT_COMMUNITY_OUTREACH_CONTENT.page_key,
+      hero_title: typeof item.hero_title === 'string' ? item.hero_title : DEFAULT_COMMUNITY_OUTREACH_CONTENT.hero_title,
+      hero_subtitle: typeof item.hero_subtitle === 'string' ? item.hero_subtitle : DEFAULT_COMMUNITY_OUTREACH_CONTENT.hero_subtitle,
+      stats: Array.isArray(item.stats) && item.stats.length > 0 ? item.stats : DEFAULT_COMMUNITY_OUTREACH_CONTENT.stats,
+      programs: Array.isArray(item.programs) && item.programs.length > 0 ? item.programs : DEFAULT_COMMUNITY_OUTREACH_CONTENT.programs,
+      upcoming_visits: Array.isArray(item.upcoming_visits) && item.upcoming_visits.length > 0 ? item.upcoming_visits : DEFAULT_COMMUNITY_OUTREACH_CONTENT.upcoming_visits,
+      testimonials: Array.isArray(item.testimonials) && item.testimonials.length > 0 ? item.testimonials : DEFAULT_COMMUNITY_OUTREACH_CONTENT.testimonials,
+      contact_points: Array.isArray(item.contact_points) && item.contact_points.length > 0 ? item.contact_points : DEFAULT_COMMUNITY_OUTREACH_CONTENT.contact_points,
+    };
+  };
+
+  const saveCommunityOutreachPageToBackend = async (pageContent: CommunityOutreachPageContent) => {
+    const listRes = await fetch(`${API_URL}/community-outreach/`);
+    if (!listRes.ok) {
+      throw new Error('Failed to load existing community outreach page.');
+    }
+
+    const existing = await listRes.json();
+    const existingList: any[] = Array.isArray(existing) ? existing : (existing.results ?? []);
+    const existingItem = existingList[0];
+    const payload = {
+      page_key: pageContent.page_key || 'community-outreach',
+      hero_title: pageContent.hero_title,
+      hero_subtitle: pageContent.hero_subtitle,
+      stats: pageContent.stats,
+      programs: pageContent.programs,
+      upcoming_visits: pageContent.upcoming_visits,
+      testimonials: pageContent.testimonials,
+      contact_points: pageContent.contact_points,
+      is_published: true,
+    };
+
+    const url = existingItem ? `${API_URL}/community-outreach/${existingItem.id}/` : `${API_URL}/community-outreach/`;
+    const method = existingItem ? 'PUT' : 'POST';
+    const saveRes = await fetch(url, {
+      method,
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!saveRes.ok) {
+      throw new Error('Failed to save community outreach page.');
+    }
+  };
+
+  const normalizeGoBackToSchoolPage = (item: any): GoBackToSchoolPageContent | null => {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    return {
+      hero_title: typeof item.hero_title === 'string' ? item.hero_title : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.hero_title,
+      hero_subtitle: typeof item.hero_subtitle === 'string' ? item.hero_subtitle : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.hero_subtitle,
+      overall_fundraising_title: typeof item.overall_fundraising_title === 'string' ? item.overall_fundraising_title : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.overall_fundraising_title,
+      overall_fundraising_copy: typeof item.overall_fundraising_copy === 'string' ? item.overall_fundraising_copy : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.overall_fundraising_copy,
+      overall_stats: Array.isArray(item.overall_stats) && item.overall_stats.length > 0 ? item.overall_stats : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.overall_stats,
+      student_cases: Array.isArray(item.student_cases) && item.student_cases.length > 0 ? item.student_cases : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.student_cases,
+      ways_to_give: Array.isArray(item.ways_to_give) && item.ways_to_give.length > 0 ? item.ways_to_give : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.ways_to_give,
+      impact_levels: Array.isArray(item.impact_levels) && item.impact_levels.length > 0 ? item.impact_levels : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.impact_levels,
+      contact_points: Array.isArray(item.contact_points) && item.contact_points.length > 0 ? item.contact_points : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.contact_points,
+    };
+  };
+
+  const saveGoBackToSchoolPageToBackend = async (pageContent: GoBackToSchoolPageContent) => {
+    const listRes = await fetch(`${API_URL}/go-back-to-school/`);
+    if (!listRes.ok) {
+      throw new Error('Failed to load existing Go Back To School page.');
+    }
+
+    const existing = await listRes.json();
+    const existingList: any[] = Array.isArray(existing) ? existing : (existing.results ?? []);
+    const existingItem = existingList[0];
+    const payload = {
+      page_key: 'go-back-to-school',
+      hero_title: pageContent.hero_title,
+      hero_subtitle: pageContent.hero_subtitle,
+      overall_fundraising_title: pageContent.overall_fundraising_title,
+      overall_fundraising_copy: pageContent.overall_fundraising_copy,
+      overall_stats: pageContent.overall_stats,
+      student_cases: pageContent.student_cases,
+      ways_to_give: pageContent.ways_to_give,
+      impact_levels: pageContent.impact_levels,
+      contact_points: pageContent.contact_points,
+      is_published: true,
+    };
+
+    const url = existingItem ? `${API_URL}/go-back-to-school/${existingItem.id}/` : `${API_URL}/go-back-to-school/`;
+    const method = existingItem ? 'PUT' : 'POST';
+    const saveRes = await fetch(url, {
+      method,
+      headers: getAdminAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!saveRes.ok) {
+      throw new Error('Failed to save Go Back To School page.');
+    }
+  };
+
   const fetchSabbathProgrammes = async () => {
     try {
       const res = await fetch(`${API_URL}/sabbath-programmes/`);
@@ -2142,27 +2745,68 @@ export default function App({ entryMode }: AppProps = {}) {
     }
   };
 
-  const fetchGallery = async () => {
-    if (!isSupabaseConfigured) {
-      setGalleryCloudAvailable(false);
-      setGalleryLoading(false);
-      return;
-    }
+  const fetchCommunityOutreachPage = async () => {
+    try {
+      const res = await fetch(`${API_URL}/community-outreach/`);
+      if (!res.ok) {
+        throw new Error('Failed to fetch community outreach page.');
+      }
 
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      const mapped = normalizeCommunityOutreachPage(list[0]);
+      if (mapped) {
+        setCommunityOutreachForm(toCommunityOutreachForm(mapped));
+        setCommunityOutreachEditor(JSON.stringify(list[0] ?? mapped, null, 2));
+        return;
+      }
+
+      setCommunityOutreachForm(toCommunityOutreachForm(DEFAULT_COMMUNITY_OUTREACH_CONTENT));
+      setCommunityOutreachEditor(JSON.stringify(DEFAULT_COMMUNITY_OUTREACH_CONTENT, null, 2));
+    } catch {
+      setCommunityOutreachForm(toCommunityOutreachForm(DEFAULT_COMMUNITY_OUTREACH_CONTENT));
+      setCommunityOutreachEditor(JSON.stringify(DEFAULT_COMMUNITY_OUTREACH_CONTENT, null, 2));
+    }
+  };
+
+  const fetchGoBackToSchoolPage = async () => {
+    try {
+      const res = await fetch(`${API_URL}/go-back-to-school/`);
+      if (!res.ok) {
+        throw new Error('Failed to fetch Go Back To School page.');
+      }
+
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      const mapped = normalizeGoBackToSchoolPage(list[0]);
+      if (mapped) {
+        setGoBackToSchoolForm(toGoBackToSchoolForm(mapped));
+        setGoBackToSchoolEditor(JSON.stringify(list[0] ?? mapped, null, 2));
+        return;
+      }
+
+      setGoBackToSchoolForm(toGoBackToSchoolForm(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT));
+      setGoBackToSchoolEditor(JSON.stringify(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT, null, 2));
+    } catch {
+      setGoBackToSchoolForm(toGoBackToSchoolForm(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT));
+      setGoBackToSchoolEditor(JSON.stringify(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT, null, 2));
+    }
+  };
+
+  const fetchGallery = async () => {
     setGalleryLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('gallery')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
-        setGalleryCloudAvailable(true);
-        setGallery(data as GalleryImage[]);
-      } else if (error) {
-        setGalleryCloudAvailable(false);
+      const res = await fetch(`${API_URL}/gallery/`);
+      if (!res.ok) {
+        throw new Error('Failed to fetch gallery images.');
       }
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      setGalleryCloudAvailable(true);
+      setGallery(list);
     } catch {
       setGalleryCloudAvailable(false);
+      setGallery([]);
     } finally {
       setGalleryLoading(false);
     }
@@ -2207,7 +2851,7 @@ export default function App({ entryMode }: AppProps = {}) {
 
     e.preventDefault();
     if (!isSupabaseConfigured) {
-      toast.error('Gallery cloud is not configured. Add Supabase keys in frontend .env.');
+      toast.error('Gallery storage is not configured. Add Supabase keys in frontend .env.');
       return;
     }
     if (!galleryUploadFile) { toast.error('Please select an image file.'); return; }
@@ -2223,19 +2867,23 @@ export default function App({ entryMode }: AppProps = {}) {
       const { data: urlData } = supabase.storage.from('church-gallery').getPublicUrl(fileName);
       const publicUrl = urlData.publicUrl;
 
-      const { error: insertError } = await supabase
-        .from('gallery')
-        .insert([{ album: galleryUploadForm.album, title: galleryUploadForm.title, img_url: publicUrl }]);
+      const res = await fetch(`${API_URL}/gallery/`, {
+        method: 'POST',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ album: galleryUploadForm.album, title: galleryUploadForm.title, img_url: publicUrl, is_published: true }),
+      });
 
-      if (insertError) throw insertError;
+      if (!res.ok) {
+        throw new Error('Failed to save gallery image.');
+      }
 
-      toast.success('Image uploaded to gallery successfully! 🎉');
+      toast.success('Image added to gallery successfully! ??');
       setGalleryUploadForm({ title: '', album: 'Sabbath Worship' });
       setGalleryUploadFile(null);
       if (galleryFileRef.current) galleryFileRef.current.value = '';
       fetchGallery();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Upload failed. Check your Supabase bucket permissions.';
+      const message = err instanceof Error ? err.message : 'Gallery save failed.';
       toast.error(message);
     } finally {
       setGalleryUploading(false);
@@ -2336,8 +2984,6 @@ export default function App({ entryMode }: AppProps = {}) {
 
   const validatePrayerForm = (): boolean => {
     const errors: Record<string, string> = {};
-    
-    // Validate content (required, min 10 chars, max 2000)
     if (!prayerForm.content.trim()) {
       errors.content = 'Please share your prayer request or praise report.';
     } else if (prayerForm.content.trim().length < 10) {
@@ -2345,24 +2991,23 @@ export default function App({ entryMode }: AppProps = {}) {
     } else if (prayerForm.content.length > 2000) {
       errors.content = 'Your request cannot exceed 2000 characters.';
     }
-    
-    // Optional: validate name if provided
+
     if (prayerForm.name.trim() && prayerForm.name.trim().length > 100) {
       errors.name = 'Name cannot exceed 100 characters.';
     }
-    
+
     setPrayerFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const handlePrayerRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validatePrayerForm()) {
       toast.error('Please fix the errors in your form.');
       return;
     }
-    
+
     setPrayerSubmitting(true);
     try {
       const res = await fetch(`${API_URL}/prayers/`, {
@@ -2371,35 +3016,26 @@ export default function App({ entryMode }: AppProps = {}) {
         body: JSON.stringify(prayerForm)
       });
       if (res.ok) {
-        await fetchPrayers();
-        triggerLog(`New prayer request submitted by ${prayerForm.name || 'Anonymous'}`);
-        toast.success("Your prayer request has been submitted. We are praying with you.");
-        setPrayerForm({ name: '', content: '', confidential: false, care_request_type: 'none' });
-        setPrayerFormErrors({});
+        fetchPrayers();
       } else {
-        const errorData = await res.json();
-        toast.error(errorData?.detail || 'Unable to submit your request. Please try again.');
+        throw new Error();
       }
     } catch {
-      // Fallback: save locally if backend unavailable
-      try {
-        const data = { ...prayerForm, id: Date.now(), follow_up_status: 'received' as const };
-        setPrayers(prev => [...prev, data]);
-        triggerLog(`New prayer request submitted by ${prayerForm.name || 'Anonymous'}`);
-        toast.success("Your prayer request has been submitted. We are praying with you.");
-        setPrayerForm({ name: '', content: '', confidential: false, care_request_type: 'none' });
-        setPrayerFormErrors({});
-      } catch {
-        toast.error('Unable to submit your request at this time. Please try again later.');
-      }
-    } finally {
-      setPrayerSubmitting(false);
+      const data = { ...prayerForm, id: Date.now(), follow_up_status: 'received' as const };
+      setPrayers(prev => [...prev, data]);
     }
+    triggerLog(`New prayer request submitted by ${prayerForm.name || 'Anonymous'}`);
+    toast.success("Your prayer request has been submitted. We are praying with you.");
+    setPrayerForm({ name: '', content: '', confidential: false, care_request_type: 'none' });
+    setPrayerFormErrors({});
+    setPrayerSubmitting(false);
   };
 
-  async function fetchTestimonies() {
+  async function fetchTestimonies(adminMode = false) {
     try {
-      const res = await fetch(`${API_URL}/testimonies/`);
+      const res = await fetch(`${API_URL}/testimonies/`, {
+        headers: adminMode ? getAdminAuthHeaders() : undefined,
+      });
       const data = await res.json();
       const items = Array.isArray(data) ? data : data.results || [];
       setTestimonies(items);
@@ -2551,7 +3187,16 @@ export default function App({ entryMode }: AppProps = {}) {
     try {
       const res = await fetch(`${API_URL}/events/${registeringEvent.id}/register/`, {
         method: 'POST',
-        headers: { Authorization: `Token ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Token ${token}`,
+        },
+        body: JSON.stringify({
+          name: eventRegForm.name.trim(),
+          email: eventRegForm.email.trim(),
+          phone: eventRegForm.phone.trim(),
+          notes: eventRegForm.notes.trim(),
+        }),
       });
 
       if (!res.ok) {
@@ -2561,9 +3206,19 @@ export default function App({ entryMode }: AppProps = {}) {
 
       const data = await res.json();
       const reference = data?.id ? `EVR-${String(data.id).padStart(4, '0')}` : `EVR-${Date.now()}`;
+      const alreadyRegistered = data?.already_registered === true;
+      const waitlisted = data?.waitlisted === true;
+      const waitlistPosition = typeof data?.waitlist_position === 'number' ? data.waitlist_position : null;
 
       triggerLog(`Registration received from ${eventRegForm.name} for event: ${registeringEvent.title}`);
-      toast.success(`Successfully registered. Ref: ${reference}`);
+      if (alreadyRegistered) {
+        toast.success(`You are already registered. Ref: ${reference}`);
+      } else if (waitlisted) {
+        const suffix = waitlistPosition ? ` Position #${waitlistPosition}.` : '';
+        toast.success(`Event is currently full. You have been added to the waitlist.${suffix} Ref: ${reference}`);
+      } else {
+        toast.success(`Successfully registered. Ref: ${reference}`);
+      }
       setEventReceipt({ eventTitle: registeringEvent.title, reference });
       setEventRegForm({ name: '', email: '', phone: '', notes: '' });
       setRegisteringEvent(null);
@@ -2583,26 +3238,60 @@ export default function App({ entryMode }: AppProps = {}) {
   // Add Event Action (Admin)
   const handleAdminAddEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { title, date, location, desc } = addEventForm;
+    const { title, date, location, category, capacity, waitlist_enabled, is_published, desc } = addEventForm;
+    const parsedCapacity = capacity.trim() === '' ? null : Number(capacity);
+    if (parsedCapacity !== null && (!Number.isFinite(parsedCapacity) || parsedCapacity <= 0)) {
+      toast.error('Event capacity must be empty or a positive number.');
+      return;
+    }
+
     try {
       const url = editingEventId ? `${API_URL}/events/${editingEventId}/` : `${API_URL}/events/`;
       const res = await fetch(url, {
         method: editingEventId ? 'PATCH' : 'POST',
         headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ title, date, location, desc })
+        body: JSON.stringify({
+          title,
+          date,
+          location,
+          category: category.trim() || 'General',
+          capacity: parsedCapacity,
+          waitlist_enabled,
+          is_published,
+          desc,
+        })
       });
       if (res.ok) {
-        fetchEvents();
+        fetchEvents(true);
       } else {
         throw new Error();
       }
     } catch {
       const nextId = events.length > 0 ? Math.max(...events.map(ev => ev.id)) + 1 : 1;
-      setEvents(prev => [...prev, { id: nextId, title, date, location, desc }]);
+      setEvents(prev => [...prev, {
+        id: nextId,
+        title,
+        date,
+        location,
+        category: category.trim() || 'General',
+        capacity: parsedCapacity,
+        waitlist_enabled,
+        is_published,
+        desc,
+      }]);
     }
     triggerLog(`Event "${title}" added to calendar.`);
     toast.success("Event added successfully!");
-    setAddEventForm({ title: '', date: '', location: '', desc: '' });
+    setAddEventForm({
+      title: '',
+      date: '',
+      location: '',
+      category: 'General',
+      capacity: '',
+      waitlist_enabled: true,
+      is_published: true,
+      desc: '',
+    });
     setEditingEventId(null);
     setShowAddEventModal(false);
   };
@@ -2610,13 +3299,13 @@ export default function App({ entryMode }: AppProps = {}) {
   // Add Sermon Action (Admin)
   const handleAdminAddSermonSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { title, speaker, date, passage, category } = addSermonForm;
+    const { title, speaker, date, passage, category, youtube_id } = addSermonForm;
     try {
       const url = editingSermonId ? `${API_URL}/sermons/${editingSermonId}/` : `${API_URL}/sermons/`;
       const res = await fetch(url, {
         method: editingSermonId ? 'PATCH' : 'POST',
         headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ title, speaker, date, passage, category })
+        body: JSON.stringify({ title, speaker, date, passage, category, youtube_id: youtube_id || '' })
       });
       if (res.ok) {
         fetchSermons();
@@ -2625,11 +3314,11 @@ export default function App({ entryMode }: AppProps = {}) {
       }
     } catch {
       const nextId = sermons.length > 0 ? Math.max(...sermons.map(s => s.id)) + 1 : 1;
-      setSermons(prev => [{ id: nextId, title, speaker, date, passage, category }, ...prev]);
+      setSermons(prev => [{ id: nextId, title, speaker, date, passage, category, youtube_id: youtube_id || '' }, ...prev]);
     }
     triggerLog(`Sermon "${title}" added to archive.`);
     toast.success("Sermon added successfully!");
-    setAddSermonForm({ title: '', speaker: '', date: '', passage: '', category: 'Sabbath Sermons' });
+    setAddSermonForm({ title: '', speaker: '', date: '', passage: '', category: 'Sabbath Sermons', youtube_id: '' });
     setEditingSermonId(null);
     setShowAddSermonModal(false);
   };
@@ -2648,6 +3337,7 @@ export default function App({ entryMode }: AppProps = {}) {
           phone: draft.phone,
           country: draft.country,
           course: draft.course,
+          group_name: draft.group_name?.trim() || '',
           registration_type: draft.registration_type,
           preferred_meeting_day: draft.preferred_meeting_day,
           preferred_meeting_time: draft.preferred_meeting_time,
@@ -2701,6 +3391,57 @@ export default function App({ entryMode }: AppProps = {}) {
     }
   };
 
+  const handleAdminModerateTestimony = async (
+    item: TestimonyItem,
+    updates: Partial<Pick<TestimonyItem, 'is_approved' | 'is_featured'>>,
+    successMessage: string
+  ) => {
+    setAdminTestimonyActionId(item.id);
+    try {
+      const res = await fetch(`${API_URL}/testimonies/${item.id}/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+      await fetchTestimonies(true);
+      triggerLog(`Testimony moderated: ID ${item.id}`);
+      toast.success(successMessage);
+    } catch {
+      setTestimonies((prev) => prev.map((entry) => (
+        entry.id === item.id ? { ...entry, ...updates } : entry
+      )));
+      triggerLog(`Testimony moderated locally: ID ${item.id}`);
+      toast.success(`${successMessage} (local)`);
+    } finally {
+      setAdminTestimonyActionId(null);
+    }
+  };
+
+  const handleAdminDeleteTestimony = async (item: TestimonyItem) => {
+    setAdminTestimonyActionId(item.id);
+    try {
+      const res = await fetch(`${API_URL}/testimonies/${item.id}/`, {
+        method: 'DELETE',
+        headers: getAdminAuthHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+      await fetchTestimonies(true);
+      triggerLog(`Testimony deleted: ID ${item.id}`);
+      toast.success('Testimony removed.');
+    } catch {
+      setTestimonies((prev) => prev.filter((entry) => entry.id !== item.id));
+      triggerLog(`Testimony deleted locally: ID ${item.id}`);
+      toast.success('Testimony removed locally.');
+    } finally {
+      setAdminTestimonyActionId(null);
+    }
+  };
+
   const handleAdminUpdateDonation = async (id: number) => {
     const draft = donationDrafts[id];
     if (!draft) return;
@@ -2736,15 +3477,97 @@ export default function App({ entryMode }: AppProps = {}) {
     }
   };
 
+  const handleLogDonation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(logDonationForm.amount);
+    if (!amount || amount <= 0) { toast.error('Enter a valid amount.'); return; }
+    try {
+      const res = await fetch(`${API_URL}/donations/`, {
+        method: 'POST',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ ...logDonationForm, amount }),
+      });
+      if (!res.ok) throw new Error();
+      setLogDonationForm({ amount: '', fund: 'Tithe', method: 'Mobile Money', status: 'Completed Stewardship' });
+      setShowLogDonationForm(false);
+      await fetchDonations();
+      toast.success('Donation logged.');
+      triggerLog(`Donation logged: ${amount.toLocaleString()} UGX � ${logDonationForm.fund}`);
+    } catch {
+      toast.error('Could not log donation.');
+    }
+  };
+
+  const handleDeleteDonation = async (id: number) => {
+    if (!window.confirm('Delete this donation record?')) return;
+    try {
+      await fetch(`${API_URL}/donations/${id}/`, { method: 'DELETE', headers: getAdminAuthHeaders() });
+      await fetchDonations();
+      toast.success('Donation deleted.');
+    } catch {
+      setDonations(prev => prev.filter(d => d.id !== id));
+    }
+  };
+
   // Delete Handlers
+  const handleAdminToggleEventPublish = async (item: ChurchEvent) => {
+    const nextPublished = !(item.is_published !== false);
+
+    try {
+      const res = await fetch(`${API_URL}/events/${item.id}/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ is_published: nextPublished }),
+      });
+      if (!res.ok) throw new Error();
+
+      await fetchEvents(true);
+      triggerLog(`${nextPublished ? 'Published' : 'Hidden'} event: ${item.title}`);
+      toast.success(nextPublished ? 'Event is now visible on the public site.' : 'Event hidden from the public site.');
+    } catch {
+      toast.error('Could not update event visibility right now.');
+    }
+  };
+
   const handleAdminDeleteEvent = async (id: number) => {
     try {
       await fetch(`${API_URL}/events/${id}/`, { method: 'DELETE', headers: getAdminAuthHeaders() });
-      fetchEvents();
+      fetchEvents(true);
     } catch {
       setEvents(prev => prev.filter(e => e.id !== id));
     }
     triggerLog(`Removed event ID: ${id}`);
+  };
+
+  const handleAdminExportEventAttendees = async (eventId?: number) => {
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      toast.error('Admin session is required to export attendees.');
+      return;
+    }
+
+    const query = eventId ? `?event_id=${eventId}` : '';
+    try {
+      const res = await fetch(`${API_URL}/events/attendees_export/${query}`, {
+        headers: { Authorization: `Token ${adminToken}` },
+      });
+      if (!res.ok) throw new Error();
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      const suffix = new Date().toISOString().slice(0, 10);
+      anchor.href = url;
+      anchor.download = eventId ? `event_${eventId}_attendees_${suffix}.csv` : `event_attendees_${suffix}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success(eventId ? 'Event attendees export downloaded.' : 'All event attendees export downloaded.');
+    } catch {
+      toast.error('Could not export attendees right now.');
+    }
   };
 
   const handleAdminDeleteSermon = async (id: number) => {
@@ -2765,6 +3588,22 @@ export default function App({ entryMode }: AppProps = {}) {
       setPrayers(prev => prev.filter(p => p.id !== id));
     }
     triggerLog(`Deleted Prayer Request ID: ${id}`);
+  };
+
+  const handlePrayerStatusUpdate = async (id: number, follow_up_status: string) => {
+    try {
+      const res = await fetch(`${API_URL}/prayers/${id}/`, {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ follow_up_status }),
+      });
+      if (res.ok) {
+        setPrayers(prev => prev.map(p => p.id === id ? { ...p, follow_up_status: follow_up_status as PrayerRequest['follow_up_status'] } : p));
+        toast.success('Follow-up status updated.');
+      }
+    } catch {
+      toast.error('Could not update status.');
+    }
   };
 
   const handleAdminDeleteStudy = async (id: number) => {
@@ -2970,7 +3809,7 @@ export default function App({ entryMode }: AppProps = {}) {
       }
 
       await fetchAdminAnnouncements();
-      setAddAnnouncementForm({ title: '', body: '', date: '', priority: 'normal', icon: '📣', is_published: true });
+      setAddAnnouncementForm({ title: '', body: '', date: '', priority: 'normal', icon: '??', is_published: true });
       setEditingAnnouncementId(null);
       triggerLog(`Announcement published: ${title}`);
       toast.success('Announcement saved successfully.');
@@ -3102,6 +3941,92 @@ export default function App({ entryMode }: AppProps = {}) {
     })();
   };
 
+  const handleSaveCommunityOutreach = () => {
+    setCommunityOutreachError('');
+    try {
+      const parsed = JSON.parse(communityOutreachEditor);
+      const normalized = normalizeCommunityOutreachPage(parsed);
+      if (!normalized) {
+        setCommunityOutreachError('Community Outreach data must be a valid JSON object.');
+        return;
+      }
+
+      void (async () => {
+        try {
+          const merged = { ...normalized, ...communityOutreachForm };
+          await saveCommunityOutreachPageToBackend(merged);
+          await fetchCommunityOutreachPage();
+          triggerLog('Community Outreach page updated.');
+          toast.success('Community Outreach page updated successfully.');
+        } catch {
+          setCommunityOutreachError('Could not save Community Outreach page to backend.');
+        }
+      })();
+    } catch {
+      setCommunityOutreachError('Invalid JSON format. Please fix syntax and try again.');
+    }
+  };
+
+  const handleResetCommunityOutreach = () => {
+    setCommunityOutreachError('');
+    setCommunityOutreachForm(toCommunityOutreachForm(DEFAULT_COMMUNITY_OUTREACH_CONTENT));
+    setCommunityOutreachEditor(JSON.stringify(DEFAULT_COMMUNITY_OUTREACH_CONTENT, null, 2));
+
+    void (async () => {
+      try {
+        await saveCommunityOutreachPageToBackend(DEFAULT_COMMUNITY_OUTREACH_CONTENT);
+        await fetchCommunityOutreachPage();
+        triggerLog('Community Outreach page reset to default template.');
+        toast('Community Outreach page reset to default.');
+      } catch {
+        setCommunityOutreachError('Could not reset Community Outreach page in backend.');
+      }
+    })();
+  };
+
+  const handleSaveGoBackToSchool = () => {
+    setGoBackToSchoolError('');
+    try {
+      const parsed = JSON.parse(goBackToSchoolEditor);
+      const normalized = normalizeGoBackToSchoolPage(parsed);
+      if (!normalized) {
+        setGoBackToSchoolError('Go Back To School data must be a valid JSON object.');
+        return;
+      }
+
+      void (async () => {
+        try {
+          const merged = { ...normalized, ...goBackToSchoolForm };
+          await saveGoBackToSchoolPageToBackend(merged);
+          await fetchGoBackToSchoolPage();
+          triggerLog('Go Back To School page updated.');
+          toast.success('Go Back To School page updated successfully.');
+        } catch {
+          setGoBackToSchoolError('Could not save Go Back To School page to backend.');
+        }
+      })();
+    } catch {
+      setGoBackToSchoolError('Invalid JSON format. Please fix syntax and try again.');
+    }
+  };
+
+  const handleResetGoBackToSchool = () => {
+    setGoBackToSchoolError('');
+    setGoBackToSchoolForm(toGoBackToSchoolForm(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT));
+    setGoBackToSchoolEditor(JSON.stringify(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT, null, 2));
+
+    void (async () => {
+      try {
+        await saveGoBackToSchoolPageToBackend(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT);
+        await fetchGoBackToSchoolPage();
+        triggerLog('Go Back To School page reset to default template.');
+        toast('Go Back To School page reset to default.');
+      } catch {
+        setGoBackToSchoolError('Could not reset Go Back To School page in backend.');
+      }
+    })();
+  };
+
   const handleSelectSabbathProgramme = (index: number) => {
     setSelectedSabbathProgramIndex(index);
     setSabbathProgramError('');
@@ -3225,8 +4150,36 @@ export default function App({ entryMode }: AppProps = {}) {
   const filteredGallery = selectedGalleryAlbum === 'all' 
     ? gallerySource 
     : gallerySource.filter(g => g.album === selectedGalleryAlbum);
+  const filteredAdminTestimonies = testimonies.filter((item) => {
+    if (adminTestimonyFilter === 'pending') {
+      return item.is_approved !== true;
+    }
+    if (adminTestimonyFilter === 'approved') {
+      return item.is_approved === true;
+    }
+    if (adminTestimonyFilter === 'featured') {
+      return item.is_featured === true;
+    }
+    return true;
+  });
 
   const totalDonations = donations.reduce((sum, item) => sum + item.amount, 0);
+  const studyGroupOptions = Array.from(new Set(
+    bibleStudies
+      .map((item) => item.group_name?.trim())
+      .filter((value): value is string => Boolean(value))
+  )).sort((left, right) => left.localeCompare(right));
+  const filteredBibleStudies = bibleStudies.filter((item) => {
+    const groupName = item.group_name?.trim() || '';
+    if (selectedStudyGroup === 'all') return true;
+    if (selectedStudyGroup === 'unassigned') return !groupName;
+    return groupName === selectedStudyGroup;
+  });
+  const bibleStudyGroupSummary = studyGroupOptions.map((groupName) => ({
+    groupName,
+    count: bibleStudies.filter((item) => (item.group_name?.trim() || '') === groupName).length,
+  }));
+  const unassignedBibleStudyCount = bibleStudies.filter((item) => !(item.group_name?.trim())).length;
   const visibleAdminTabs = ADMIN_TABS.filter((tab) => allowedAdminTabs.includes(tab.id));
   const sabbathSchoolOnlyAccess = sabbathProgrammeScope === 'sabbath_school_only';
 
@@ -3271,6 +4224,7 @@ export default function App({ entryMode }: AppProps = {}) {
         fetchAdminAnnouncements();
         fetchProjects(true);
         fetchAdminAuditLogs();
+        fetchEvents(true);
         if (nextTabs.includes('admin-accounts')) {
           fetchAdminAccounts();
         }
@@ -3330,6 +4284,9 @@ export default function App({ entryMode }: AppProps = {}) {
         if (nextTabs.includes('admin-accounts')) {
           fetchAdminAccounts();
         }
+        if (nextTabs.includes('admin-events')) {
+          fetchEvents(true);
+        }
       }
       return allowed;
     } catch {
@@ -3353,13 +4310,34 @@ export default function App({ entryMode }: AppProps = {}) {
     }
   }, [allowedAdminTabs, activeAdminTab]);
 
+  useEffect(() => {
+    if (!isAdminAuthenticated) {
+      return;
+    }
+    if (activeAdminTab === 'admin-testimonies') {
+      void fetchTestimonies(true);
+    }
+    if (activeAdminTab === 'admin-events') {
+      void fetchEvents(true);
+    }
+    if (activeAdminTab === 'admin-staff') {
+      void fetchStaffDirectory(true);
+    }
+    if (activeAdminTab === 'admin-forums') {
+      void fetchForumsAdmin();
+    }
+    if (activeAdminTab === 'admin-hymns') {
+      void fetchHymnsAdmin();
+    }
+  }, [activeAdminTab, isAdminAuthenticated]);
+
   const handleAdminLogout = () => {
     setIsAdminAuthenticated(false);
     setAllowedAdminTabs(ADMIN_TABS.map((tab) => tab.id));
     setSabbathProgrammeScope('full');
     setAdminLoginForm({ username: '', password: '' });
     setOpenProjectHistoryId(null);
-    setCurrentRoute(isAdminEntry ? 'admin' : 'home');
+    setCurrentRoute(IS_ADMIN_ENTRY ? 'admin' : 'home');
     localStorage.removeItem('admin_tabs');
     localStorage.removeItem('sabbath_programme_scope');
     fetchProjects();
@@ -3372,10 +4350,11 @@ export default function App({ entryMode }: AppProps = {}) {
       <Toaster position="top-right" />
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <>
+      {!IS_ADMIN_ENTRY && <>
       {/* Top Bar with Tagline & Social / Admin Link */}
       <div className="top-bar">
         <div className="container top-bar-content">
-          <span className="tagline">Growing in Christ • Serving the World • Sharing Hope</span>
+          <span className="tagline">Growing in Christ � Serving the World � Sharing Hope</span>
         </div>
       </div>
 
@@ -3819,13 +4798,14 @@ export default function App({ entryMode }: AppProps = {}) {
           </div>
         </aside>
       </div>
+      </>}
 
       {/* Content wrapper */}
       <main id="main-content" className="content-wrapper">
         {eventReceipt && currentRoute === 'events' && (
           <div className="container" style={{ marginTop: '1rem' }}>
             <div className="card" style={{ borderLeft: '4px solid #16a34a', padding: '0.9rem 1rem' }}>
-              <strong>Registration confirmed:</strong> {eventReceipt.eventTitle} • Reference {eventReceipt.reference}
+              <strong>Registration confirmed:</strong> {eventReceipt.eventTitle} � Reference {eventReceipt.reference}
             </div>
           </div>
         )}
@@ -3842,11 +4822,11 @@ export default function App({ entryMode }: AppProps = {}) {
               <motion.div className="hero-content" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}>
                 <motion.div className="hero-badge" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, delay: 0.05 }}>
                   <span className="pulse-dot"></span>
-                  <span>Sabbath Worship • Every Saturday</span>
+                  <span>Sabbath Worship � Every Saturday</span>
                 </motion.div>
                 <motion.h1 className="hero-title" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.15 }}>Seattle International Church</motion.h1>
                 <motion.p className="hero-location" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.3 }}>Bugema University, Uganda</motion.p>
-                <motion.p className="hero-subtitle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.45 }}>Welcome to a Christ-Centered International Family of Faith — Growing in Grace, Serving the World, Sharing Hope.</motion.p>
+                <motion.p className="hero-subtitle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.45 }}>Welcome to a Christ-Centered International Family of Faith � Growing in Grace, Serving the World, Sharing Hope.</motion.p>
                 <motion.p className="hero-subtitle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.5 }} style={{ fontWeight: 600 }}>
                   {CORE_MISSION_STATEMENT}
                 </motion.p>
@@ -3887,7 +4867,7 @@ export default function App({ entryMode }: AppProps = {}) {
                   <div>
                     <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>This Sabbath</p>
                     <h3 style={{ marginBottom: '0.3rem' }}>{thisSabbathEvent.title}</h3>
-                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>{thisSabbathEvent.date} • {thisSabbathEvent.location}</p>
+                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>{thisSabbathEvent.date} � {thisSabbathEvent.location}</p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
                     <button onClick={() => setCurrentRoute('events')} className="btn btn-outline btn-small">View Details</button>
@@ -3931,7 +4911,7 @@ export default function App({ entryMode }: AppProps = {}) {
                       <div key={item.id} className="weekly-essential-item">
                         <div className="weekly-essential-copy">
                           <span className={`weekly-check ${weeklyEssentialsProgress[item.id] ? 'done' : ''}`}>
-                            {weeklyEssentialsProgress[item.id] ? '✓' : '○'}
+                            {weeklyEssentialsProgress[item.id] ? '?' : '?'}
                           </span>
                           <span>{item.label}</span>
                         </div>
@@ -4152,19 +5132,19 @@ export default function App({ entryMode }: AppProps = {}) {
               <div className="container">
                 <motion.div className="section-header text-center" variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}>
                   <h2 className="section-title" style={{ color: '#D4AF37' }}>Your Weekly Spiritual Checkpoint</h2>
-                  <p className="section-subtitle" style={{ color: 'rgba(255,255,255,0.7)' }}>Track your discipleship journey this week — reset every Sabbath</p>
+                  <p className="section-subtitle" style={{ color: 'rgba(255,255,255,0.7)' }}>Track your discipleship journey this week � reset every Sabbath</p>
                 </motion.div>
 
                 <div className="grid grid-3 gap-3 margin-top-3">
 
                   {/* Discipleship Checklist */}
                   <motion.div className="card dark-card" variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-                    <h3 style={{ color: '#D4AF37', marginBottom: '1rem' }}>✅ Weekly Checklist</h3>
+                    <h3 style={{ color: '#D4AF37', marginBottom: '1rem' }}>? Weekly Checklist</h3>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                       {CHECKLIST_ITEMS.map(item => (
                         <li key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }} onClick={() => toggleChecklistItem(item.id)}>
                           <span style={{ fontSize: '1rem', width: '24px', height: '24px', borderRadius: '6px', background: checklist[item.id] ? '#10b981' : 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s', flexShrink: 0, color: '#fff' }}>
-                            {checklist[item.id] ? '✓' : ''}
+                            {checklist[item.id] ? '?' : ''}
                           </span>
                           <span style={{ fontSize: '0.9rem', color: checklist[item.id] ? '#10b981' : 'rgba(255,255,255,0.85)', textDecoration: checklist[item.id] ? 'line-through' : 'none', transition: 'all 0.3s' }}>
                             {item.icon} {item.label}
@@ -4180,7 +5160,7 @@ export default function App({ entryMode }: AppProps = {}) {
                   {/* Poll + Praise Wall */}
                   <motion.div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }} variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }}>
                     <div className="card dark-card" style={{ flex: 1 }}>
-                      <h3 style={{ color: '#D4AF37', marginBottom: '0.75rem' }}>📊 Lesson Poll</h3>
+                      <h3 style={{ color: '#D4AF37', marginBottom: '0.75rem' }}>?? Lesson Poll</h3>
                       <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginBottom: '0.75rem' }}>Which Bible book impacted you most this Sabbath?</p>
                       {POLL_OPTIONS.map(option => {
                         const total = Object.values(pollResults).reduce((s: number, v) => s + Number(v), 0);
@@ -4206,7 +5186,7 @@ export default function App({ entryMode }: AppProps = {}) {
                     </div>
 
                     <div className="card dark-card" style={{ flex: 1 }}>
-                      <h3 style={{ color: '#D4AF37', marginBottom: '0.75rem' }}>🙌 Community Praise Wall</h3>
+                      <h3 style={{ color: '#D4AF37', marginBottom: '0.75rem' }}>?? Community Praise Wall</h3>
                       <div style={{ maxHeight: '130px', overflowY: 'auto', marginBottom: '0.75rem' }}>
                         {praiseWall.length === 0 && <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>Be the first to share a praise!</p>}
                         {praiseWall.map((p, i) => (
@@ -4219,14 +5199,14 @@ export default function App({ entryMode }: AppProps = {}) {
                       <form onSubmit={submitPraise} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                         <input type="text" value={praiseForm.name} onChange={e => setPraiseForm({ ...praiseForm, name: e.target.value })} placeholder="Your name (optional)" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px', padding: '0.4rem 0.6rem', color: '#fff', fontSize: '0.85rem' }} />
                         <input type="text" value={praiseForm.text} onChange={e => setPraiseForm({ ...praiseForm, text: e.target.value })} placeholder="Share a praise report..." required style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px', padding: '0.4rem 0.6rem', color: '#fff', fontSize: '0.85rem' }} />
-                        <button type="submit" className="btn btn-accent btn-small">Post Praise 🙏</button>
+                        <button type="submit" className="btn btn-accent btn-small">Post Praise ??</button>
                       </form>
                     </div>
                   </motion.div>
 
                   {/* Weekly Bible Quiz */}
                   <motion.div className="card dark-card" variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-                    <h3 style={{ color: '#D4AF37', marginBottom: '1rem' }}>📝 Weekly Bible Quiz</h3>
+                    <h3 style={{ color: '#D4AF37', marginBottom: '1rem' }}>?? Weekly Bible Quiz</h3>
                     {!quizSubmitted ? (
                       <>
                         {QUIZ_QUESTIONS.map((q, i) => (
@@ -4244,7 +5224,7 @@ export default function App({ entryMode }: AppProps = {}) {
                       </>
                     ) : (
                       <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>{quizScore === QUIZ_QUESTIONS.length ? '🏆' : quizScore >= 2 ? '⭐' : '📖'}</div>
+                        <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>{quizScore === QUIZ_QUESTIONS.length ? '??' : quizScore >= 2 ? '?' : '??'}</div>
                         <h4 style={{ color: '#D4AF37' }}>Score: {quizScore} / {QUIZ_QUESTIONS.length}</h4>
                         <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.88rem', marginTop: '0.5rem' }}>
                           {quizScore === QUIZ_QUESTIONS.length ? 'Perfect! You are a true Bible champion!' : quizScore >= 2 ? "Well done! Keep studying God's Word." : 'Keep growing! Open your Bible this week.'}
@@ -4429,7 +5409,7 @@ export default function App({ entryMode }: AppProps = {}) {
                   <motion.div className="card sermon-featured-card" variants={fadeUp} initial="hidden" animate="visible" style={{ marginBottom: '1.25rem', borderLeft: '4px solid var(--primary)' }}>
                     <p className="sermon-featured-kicker" style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Featured Message</p>
                     <h2 className="sermon-featured-title" style={{ marginBottom: '0.45rem' }}>{featuredSermon.title}</h2>
-                    <p className="sermon-featured-meta" style={{ color: 'var(--text-muted)', marginBottom: '0.65rem' }}>Speaker: <strong>{featuredSermon.speaker}</strong> • {featuredSermon.passage} • {featuredSermon.date}</p>
+                    <p className="sermon-featured-meta" style={{ color: 'var(--text-muted)', marginBottom: '0.65rem' }}>Speaker: <strong>{featuredSermon.speaker}</strong> � {featuredSermon.passage} � {featuredSermon.date}</p>
                     <div className="sermon-featured-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <button onClick={() => setCurrentRoute('watch-live')} className="btn btn-primary btn-small">Watch Sermon</button>
                       <button onClick={() => setCurrentRoute('forums')} className="btn btn-outline btn-small">Discuss This Sermon</button>
@@ -4564,7 +5544,7 @@ export default function App({ entryMode }: AppProps = {}) {
                       {pastEvents.slice(0, 4).map((e) => (
                         <div key={e.id} className="card">
                           <h3 style={{ marginBottom: '0.3rem' }}>{e.title}</h3>
-                          <p className="text-muted" style={{ marginBottom: '0.35rem' }}>{e.date} • {e.location}</p>
+                          <p className="text-muted" style={{ marginBottom: '0.35rem' }}>{e.date} � {e.location}</p>
                           <p style={{ marginBottom: 0 }}>{e.desc}</p>
                         </div>
                       ))}
@@ -4621,7 +5601,7 @@ export default function App({ entryMode }: AppProps = {}) {
 
                 {galleryLoading && (
                   <div className="text-center margin-top-3" style={{ padding: '3rem', color: 'var(--text-muted)' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📸</div>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>??</div>
                     <p>Loading photos from cloud...</p>
                   </div>
                 )}
@@ -4878,8 +5858,8 @@ export default function App({ entryMode }: AppProps = {}) {
             <div className="section-padding bg-light">
               <div className="container">
                 <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-                  <h2 className="section-title text-center">📚 Sabbath School Lesson Discussion</h2>
-                  <p className="section-subtitle text-center">Join the weekly SDA Adult lesson — study, discuss, and grow together</p>
+                  <h2 className="section-title text-center">?? Sabbath School Lesson Discussion</h2>
+                  <p className="section-subtitle text-center">Join the weekly SDA Adult lesson � study, discuss, and grow together</p>
                 </motion.div>
 
                 {/* Weekly Lesson Video Feature */}
@@ -4895,7 +5875,7 @@ export default function App({ entryMode }: AppProps = {}) {
                     
                     {/* Left: Video Player */}
                     <div>
-                      <h3 style={{ marginBottom: '1rem', color: 'var(--primary-dark)' }}>🎬 Weekly Discussion Broadcast</h3>
+                      <h3 style={{ marginBottom: '1rem', color: 'var(--primary-dark)' }}>?? Weekly Discussion Broadcast</h3>
                       {(() => {
                         const currentVideo = lessonVideos.find(v => v.week === selectedLessonWeek) || lessonVideos[0];
                         return (
@@ -4954,18 +5934,18 @@ export default function App({ entryMode }: AppProps = {}) {
 
                 <motion.div className="grid grid-3 gap-3 margin-top-3" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }}>
                   {[
-                    { title: 'Official Adult Lesson', desc: "Download this quarter's official Sabbath School lesson booklet and study daily.", link: 'https://www.sabbath.school/', icon: '📖', cta: 'Get Lesson' },
-                    { title: 'SSNET Discussion Guides', desc: 'Deep-dive commentary and teacher guides for each weekly lesson from ssnet.org.', link: 'https://ssnet.org/lessons/', icon: '🗣️', cta: 'Read Commentary' },
-                    { title: 'Hope Channel Video', desc: 'Watch video presentations for each lesson from Hope Channel International.', link: 'https://www.hopechannel.com/', icon: '📺', cta: 'Watch Lesson' },
-                    { title: 'SDA Church Quarterly', desc: 'Access the global SDA Sabbath School quarterly archives and resources.', link: 'https://sspm.adventist.org/', icon: '📰', cta: 'View Quarterly' },
-                    { title: 'WhatsApp Study Group', desc: "Join our SIC Bugema WhatsApp group where members discuss each day's lesson.", link: 'https://wa.me/256700000000', icon: '💬', cta: 'Join Group' },
-                    { title: 'Audio Bible Study', desc: "Listen to this week's lesson discussion podcast from various SDA ministries.", link: 'https://www.sabbath.school/', icon: '🎧', cta: 'Listen Now' },
+                    { title: 'Official Adult Lesson', desc: "Download this quarter's official Sabbath School lesson booklet and study daily.", link: 'https://www.sabbath.school/', icon: '??', cta: 'Get Lesson' },
+                    { title: 'SSNET Discussion Guides', desc: 'Deep-dive commentary and teacher guides for each weekly lesson from ssnet.org.', link: 'https://ssnet.org/lessons/', icon: '???', cta: 'Read Commentary' },
+                    { title: 'Hope Channel Video', desc: 'Watch video presentations for each lesson from Hope Channel International.', link: 'https://www.hopechannel.com/', icon: '??', cta: 'Watch Lesson' },
+                    { title: 'SDA Church Quarterly', desc: 'Access the global SDA Sabbath School quarterly archives and resources.', link: 'https://sspm.adventist.org/', icon: '??', cta: 'View Quarterly' },
+                    { title: 'WhatsApp Study Group', desc: "Join our SIC Bugema WhatsApp group where members discuss each day's lesson.", link: 'https://wa.me/256700000000', icon: '??', cta: 'Join Group' },
+                    { title: 'Audio Bible Study', desc: "Listen to this week's lesson discussion podcast from various SDA ministries.", link: 'https://www.sabbath.school/', icon: '??', cta: 'Listen Now' },
                   ].map((res, i) => (
                     <motion.div key={i} className="card student-card" variants={staggerItem} whileHover={{ y: -5, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.12)' }}>
                       <div className="student-icon" style={{ fontSize: '1.6rem' }}>{res.icon}</div>
                       <h3>{res.title}</h3>
                       <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', flexGrow: 1 }}>{res.desc}</p>
-                      <a href={res.link} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-small margin-top-2">{res.cta} →</a>
+                      <a href={res.link} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-small margin-top-2">{res.cta} ?</a>
                     </motion.div>
                   ))}
                 </motion.div>
@@ -4994,32 +5974,32 @@ export default function App({ entryMode }: AppProps = {}) {
             <div className="section-padding">
               <div className="container max-width-600 card" style={{ maxWidth: '600px', margin: '0 auto' }}>
                 <h2 className="section-title text-center">Submit a Prayer Request</h2>
-                <motion.div className="card" style={{ backgroundColor: 'rgba(212, 175, 55, 0.08)', border: '1px solid rgba(212, 175, 55, 0.2)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }} variants={fadeIn} initial="hidden" animate="visible">
-                  <p className="text-center" style={{ margin: '0', fontSize: '0.95rem', color: 'var(--text-color)' }}>
-                    <strong>🔒 Your privacy matters:</strong> Delivered to pastors/elders. Mark confidential to limit to pastoral team only.
-                  </p>
-                </motion.div>
+                <p className="text-center text-muted">Your request will be delivered to our pastors and elders. If checked confidential, only the pastors will receive it.</p>
                 
                 <form onSubmit={handlePrayerRequestSubmit} className="margin-top-3">
                   <div className="form-group">
-                    <label>Your Name <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.9rem' }}>(optional)</span></label>
+                    <label htmlFor="prayer-name">Your Name (Optional)</label>
                     <input 
+                      id="prayer-name"
                       type="text" 
                       value={prayerForm.name} 
-                      onChange={(e) => setPrayerForm({ ...prayerForm, name: e.target.value })} 
+                      onChange={(e) => {
+                        setPrayerForm({ ...prayerForm, name: e.target.value });
+                        if (prayerFormErrors.name) {
+                          setPrayerFormErrors({ ...prayerFormErrors, name: '' });
+                        }
+                      }} 
+                      onBlur={validatePrayerForm}
+                      aria-invalid={Boolean(prayerFormErrors.name)}
+                      aria-describedby="prayer-name-error"
                       placeholder="Leave blank to submit anonymously" 
-                      style={prayerFormErrors.name ? { borderColor: '#d32f2f', boxShadow: '0 0 0 3px rgba(211, 47, 47, 0.1)' } : {}}
                     />
-                    {prayerFormErrors.name && <span style={{ color: '#d32f2f', fontSize: '0.85rem', marginTop: '0.25rem', display: 'block' }}>❌ {prayerFormErrors.name}</span>}
+                    {prayerFormErrors.name && <p id="prayer-name-error" className="form-error">{prayerFormErrors.name}</p>}
                   </div>
                   <div className="form-group">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <label>Prayer Request <span style={{ color: '#d32f2f' }}>*</span></label>
-                      <span style={{ fontSize: '0.85rem', color: prayerForm.content.length > 1800 ? '#f57c00' : prayerForm.content.length > 1900 ? '#d32f2f' : 'var(--text-muted)' }}>
-                        {prayerForm.content.length}/2000
-                      </span>
-                    </div>
+                    <label htmlFor="prayer-content">Prayer Request</label>
                     <textarea 
+                      id="prayer-content"
                       value={prayerForm.content} 
                       onChange={(e) => {
                         setPrayerForm({ ...prayerForm, content: e.target.value });
@@ -5027,12 +6007,15 @@ export default function App({ entryMode }: AppProps = {}) {
                           setPrayerFormErrors({ ...prayerFormErrors, content: '' });
                         }
                       }} 
+                      onBlur={validatePrayerForm}
+                      required 
+                      aria-invalid={Boolean(prayerFormErrors.content)}
+                      aria-describedby="prayer-content-help prayer-content-error"
                       rows={6} 
                       placeholder="Write your petition or praise report here..."
-                      style={prayerFormErrors.content ? { borderColor: '#d32f2f', boxShadow: '0 0 0 3px rgba(211, 47, 47, 0.1)' } : {}}
                     />
-                    {prayerFormErrors.content && <span style={{ color: '#d32f2f', fontSize: '0.85rem', marginTop: '0.25rem', display: 'block' }}>❌ {prayerFormErrors.content}</span>}
-                    <span style={{ display: 'block', marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Be as detailed or brief as you're comfortable.</span>
+                    <p id="prayer-content-help" className="form-help">Please share at least 10 characters. Your request is handled with pastoral care.</p>
+                    {prayerFormErrors.content && <p id="prayer-content-error" className="form-error">{prayerFormErrors.content}</p>}
                   </div>
                   <div className="form-group checkbox-group">
                     <input 
@@ -5041,31 +6024,31 @@ export default function App({ entryMode }: AppProps = {}) {
                       checked={prayerForm.confidential} 
                       onChange={(e) => setPrayerForm({ ...prayerForm, confidential: e.target.checked })} 
                     />
-                    <label htmlFor="prayer-check" style={{ marginBottom: '0' }}>🔐 Keep strictly confidential (pastoral team only)</label>
+                    <label htmlFor="prayer-check">Keep this request strictly confidential (Pastors only)</label>
                   </div>
                   <div className="form-group">
-                    <label>Would you like pastoral care follow-up?</label>
+                    <label>Would you like a care follow-up?</label>
                     <select
                       value={prayerForm.care_request_type}
                       onChange={(e) => setPrayerForm({ ...prayerForm, care_request_type: e.target.value as 'none' | 'pastoral_call' | 'elder_visit' | 'counseling' | 'prayer_partner' })}
                     >
                       <option value="none">No additional care needed</option>
-                      <option value="pastoral_call">Yes, please call me</option>
-                      <option value="elder_visit">Yes, elder visit</option>
+                      <option value="pastoral_call">Pastoral call</option>
+                      <option value="elder_visit">Elder visit</option>
                       <option value="counseling">Counseling support</option>
-                      <option value="prayer_partner">Connect me with a prayer partner</option>
+                      <option value="prayer_partner">Prayer partner</option>
                     </select>
-                    <span style={{ display: 'block', marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Optional follow-up from our pastoral team.</span>
                   </div>
-                  <button 
-                    type="submit" 
-                    className="btn btn-primary btn-block" 
-                    disabled={prayerSubmitting || !isPrayerFormValid || Object.keys(prayerFormErrors).length > 0}
-                    style={{ opacity: prayerSubmitting ? 0.7 : 1, cursor: prayerSubmitting ? 'not-allowed' : 'pointer' }}
-                  >
-                    {prayerSubmitting ? '✨ Submitting your request...' : '🙏 Submit Prayer Request'}
+                  <button type="submit" className="btn btn-primary btn-block" disabled={!isPrayerFormValid || prayerSubmitting}>
+                    {prayerSubmitting ? 'Submitting Request...' : 'Submit Request'}
                   </button>
                 </form>
+
+                {prayerSuccess && (
+                  <motion.div className="alert alert-success margin-top-2" variants={fadeIn} initial="hidden" animate="visible">
+                    Your request has been submitted. Rest assured, our team will be praying for you.
+                  </motion.div>
+                )}
               </div>
             </div>
 
@@ -5081,10 +6064,10 @@ export default function App({ entryMode }: AppProps = {}) {
                     prayers.filter(p => !p.confidential).map((pr, i) => (
                       <motion.div key={i} className="card" variants={staggerItem} whileHover={{ y: -3 }}>
                         <p style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>"{pr.content}"</p>
-                        <p style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>— <strong>{pr.name || 'Anonymous'}</strong></p>
+                        <p style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>� <strong>{pr.name || 'Anonymous'}</strong></p>
                         <p style={{ marginTop: '0.4rem', marginBottom: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                           Follow-up: <strong>{FOLLOW_UP_STATUS_LABELS[pr.follow_up_status || 'received']}</strong>
-                          {pr.care_request_type && pr.care_request_type !== 'none' ? ` • Care: ${CARE_REQUEST_LABELS[pr.care_request_type]}` : ''}
+                          {pr.care_request_type && pr.care_request_type !== 'none' ? ` � Care: ${CARE_REQUEST_LABELS[pr.care_request_type]}` : ''}
                         </p>
                         <button
                           onClick={() => pr.id !== undefined && supportPrayer(pr.id)}
@@ -5092,7 +6075,7 @@ export default function App({ entryMode }: AppProps = {}) {
                           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                           disabled={pr.id !== undefined && prayerSupportedIds.includes(pr.id)}
                         >
-                          🙏 {pr.id !== undefined && prayerSupportedIds.includes(pr.id) ? 'Praying!' : 'Pray With Them'}
+                          ?? {pr.id !== undefined && prayerSupportedIds.includes(pr.id) ? 'Praying!' : 'Pray With Them'}
                           {pr.id !== undefined && prayerSupport[pr.id] > 0 && <span>({prayerSupport[pr.id]})</span>}
                         </button>
                       </motion.div>
@@ -5125,7 +6108,7 @@ export default function App({ entryMode }: AppProps = {}) {
             <div className="page-header" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)' }}>
               <div className="container text-center">
                 <h1 style={{ color: '#fff' }}>Seattle Projects</h1>
-                <p style={{ color: 'rgba(255,255,255,0.75)' }}>Active church initiatives — construction, community development, and outreach</p>
+                <p style={{ color: 'rgba(255,255,255,0.75)' }}>Active church initiatives � construction, community development, and outreach</p>
               </div>
             </div>
 
@@ -5190,7 +6173,7 @@ export default function App({ entryMode }: AppProps = {}) {
                             }}
                             className="btn btn-primary btn-block"
                           >
-                            🙌 Support This Project
+                            ?? Support This Project
                           </button>
                         </div>
                       </motion.div>
@@ -5490,7 +6473,7 @@ export default function App({ entryMode }: AppProps = {}) {
                             <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#1e293b' }}>{notice.title}</h3>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
                               <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.65rem', borderRadius: '20px', background: colors.badge, color: colors.badgeText, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                {notice.priority === 'high' ? '🔴 Urgent' : notice.priority === 'low' ? '🟢 Info' : '🔵 Notice'}
+                                {notice.priority === 'high' ? '?? Urgent' : notice.priority === 'low' ? '?? Info' : '?? Notice'}
                               </span>
                               <span style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap' }}>{notice.date}</span>
                             </div>
@@ -5503,7 +6486,7 @@ export default function App({ entryMode }: AppProps = {}) {
                 </motion.div>
 
                 <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} className="card dark-card text-center margin-top-4" style={{ padding: '2rem' }}>
-                  <h3 style={{ color: '#D4AF37' }}>📣 Submit an Announcement</h3>
+                  <h3 style={{ color: '#D4AF37' }}>?? Submit an Announcement</h3>
                   <p style={{ color: 'rgba(255,255,255,0.7)', marginTop: '0.5rem', marginBottom: '1.5rem' }}>Ministry leaders and elders can submit notices through the church office or admin portal.</p>
                   <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => setCurrentRoute('contact')} className="btn btn-accent btn-small">Contact Church Office</button>
@@ -5535,7 +6518,7 @@ export default function App({ entryMode }: AppProps = {}) {
                   cursor: 'pointer'
                 }}
               >
-                ✕
+                ?
               </button>
               {authMode === 'login' ? (
                 <div>
@@ -5749,7 +6732,7 @@ export default function App({ entryMode }: AppProps = {}) {
                         <p className="weekly-kicker">{TESTIMONY_TYPE_LABELS[item.testimony_type || 'spiritual_growth']}</p>
                         <h3 style={{ marginBottom: '0.45rem' }}>{item.title}</h3>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.65rem' }}>
-                          {item.author_name || 'Anonymous'} • {new Date(item.created_at).toLocaleDateString()}
+                          {item.author_name || 'Anonymous'} � {new Date(item.created_at).toLocaleDateString()}
                         </p>
                         <p style={{ color: 'var(--text-muted)', marginBottom: '0.65rem' }}>
                           {item.content.length > 220 ? `${item.content.slice(0, 220)}...` : item.content}
@@ -5848,7 +6831,7 @@ export default function App({ entryMode }: AppProps = {}) {
                   </motion.div>
                   <motion.div className="card" variants={staggerItem}>
                     <h3>Join the Music</h3>
-                    <p>Auditions are open year-round. Come express your faith through music—from traditional hymns to contemporary worship. We practice weekly and perform during our main services and special events.</p>
+                    <p>Auditions are open year-round. Come express your faith through music�from traditional hymns to contemporary worship. We practice weekly and perform during our main services and special events.</p>
                     <button onClick={() => setCurrentRoute('contact')} className="btn btn-primary margin-top-2">Join the Choir</button>
                   </motion.div>
                 </motion.div>
@@ -5964,99 +6947,201 @@ export default function App({ entryMode }: AppProps = {}) {
             ) : !isAdminAuthenticated ? (
               /* ---- Admin Login Screen ---- */
               <>
-                <div className="page-header" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)' }}>
-                  <div className="container text-center">
-                    <h1 style={{ color: '#fff' }}>Admin Portal</h1>
-                    <p style={{ color: 'rgba(255,255,255,0.75)' }}>Authorized church staff access only</p>
-                  </div>
-                </div>
-                <div className="section-padding">
-                  <div style={{ maxWidth: '440px', margin: '0 auto' }}>
-                    <motion.div className="card" variants={scaleIn} initial="hidden" animate="visible" style={{ borderTop: '4px solid var(--primary)' }}>
-                      <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                        <div style={{ width: '60px', height: '60px', background: 'rgba(30,58,138,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                          </svg>
-                        </div>
-                        <h2 style={{ color: 'var(--primary-dark)', marginBottom: '0.25rem' }}>Sign In</h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Enter your church admin credentials</p>
+                {/* Full-page login layout */}
+                <div style={{
+                  minHeight: '100vh',
+                  background: 'linear-gradient(150deg, #0f172a 0%, #1e3a8a 50%, #1e40af 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '2rem 1rem',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}>
+                  {/* Decorative background circles */}
+                  <div style={{ position: 'absolute', top: '-80px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', bottom: '-120px', left: '-60px', width: '400px', height: '400px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+
+                  <motion.div
+                    variants={scaleIn}
+                    initial="hidden"
+                    animate="visible"
+                    style={{
+                      width: '100%',
+                      maxWidth: '460px',
+                      background: '#fff',
+                      borderRadius: '16px',
+                      boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      zIndex: 1,
+                    }}
+                  >
+                    {/* Card top banner */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%)',
+                      padding: '2rem 2rem 1.5rem',
+                      textAlign: 'center',
+                    }}>
+                      {/* Church crest / shield icon */}
+                      <div style={{
+                        width: '88px', height: '88px',
+                        background: 'rgba(255,255,255,0.12)',
+                        borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 1rem',
+                        border: '2px solid rgba(255,255,255,0.25)',
+                        overflow: 'hidden',
+                      }}>
+                        <svg width="72" height="72" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="85" cy="85" r="85" fill="rgba(255,255,255,0.1)" />
+                          <g transform="translate(17, 17) scale(0.8)">
+                            <g transform="translate(-20.5, -20.6)" fill="#D4AF37">
+                              <path d="m 128.7,161.7 c -11.5,-1.9 -17.7,3.5 -19.6,8.6 -0.2,0.5 -0.7,0.4 -0.7,0 v -1.6 c 0,-5.7 5.1,-10.9 11.1,-17 l 10,-10 26.6,4.6 c 0,0 7.6,7.6 14.1,14.1 12.5,-14.8 20.1,-34 20.1,-54.9 0,-46.9 -38,-84.9 -84.9,-84.9 -46.9,0 -84.9,38 -84.9,84.9 0,20.9 7.6,40.1 20.1,54.9 6.5,-6.5 14.1,-14.1 14.1,-14.1 l 30.2,-5.2 c 14,-2.4 17.5,0.7 17.5,5.4 0,0.2 -0.2,0.4 -0.4,0.4 h -8.5 c -0.2,0 -0.2,0.2 -0.2,0.4 v 5.2 c 0,0.2 -0.2,0.2 0,0.2 h 8.7 c 0.2,0 0.4,0.2 0.4,0.4 0,0 0,16.9 0,17.3 0,0.4 -0.5,0.5 -0.7,0.1 -1.9,-5.1 -8.1,-10.5 -19.6,-8.6 0,0 -19.9,3.4 -34.7,6 15.2,14.1 35.5,22.8 57.9,22.8 22.4,0 42.7,-8.6 57.9,-22.8 -14.6,-2.8 -34.5,-6.2 -34.5,-6.2 z m -19.5,0.2 c -0.1,0.5 -0.7,0.5 -0.7,0 V 153 c 0,-0.2 0.1,-0.4 0.3,-0.4 h 4.4 c -1.9,2.7 -3.2,5.3 -4,9.3 z m 31.5,-55.5 c 2.1,6.9 0.7,17.4 -9.2,27.4 l -12,11.8 c -0.3,0.3 -0.7,0.8 -1,0.8 h -8.2 c 2,-3 5.4,-6.8 9.2,-10.6 l 8.3,-8.3 C 138.3,117 140,112 140,106.2 c 0.1,-0.4 0.6,-0.4 0.7,0.2 z m -16.3,-6.5 c 6.8,-6.8 8.5,-14.7 3,-19.4 -0.5,-0.4 -0.2,-0.9 0.4,-0.6 6.8,3.1 12.1,14.3 0.5,25.9 l -8.8,8.8 c -6,6 -8.8,8.8 -10.3,16.1 -0.1,0.5 -0.7,0.5 -0.7,0 v -8.9 c 0,-5.7 5,-10.9 11.1,-17 z m -54.1,8 C 68.2,101 69.6,90.5 79.5,80.5 l 26.4,-26.4 c 6,-6 9.1,-8.9 10.6,-16.1 0.1,-0.5 1,-0.5 1,0 v 8.9 c 0,5.7 -5.3,10.9 -11.4,17 L 83.3,86.6 C 72.7,97.2 71,102.1 71,107.9 c 0,0.6 -0.5,0.6 -0.7,0 z m 4,15.7 c -5.9,-7.2 -3.9,-18.4 7.7,-30 l 23.9,-23.9 c 6,-6 9.1,-8.9 10.6,-16.2 0.1,-0.5 1,-0.5 1,0 v 9 c 0,5.7 -5.3,10.9 -11.4,17 l -21.2,21.1 c -4.4,4.4 -13.9,13.8 -10,22.6 0.3,0.6 -0.2,0.9 -0.6,0.4 z m 12.3,-9.2 c -6.8,6.8 -8.5,14.7 -3,19.4 0.5,0.4 0.2,0.9 -0.4,0.6 -6.8,-3.1 -12.1,-14.3 -0.5,-25.9 l 23.2,-23.2 c 6,-6 9.1,-8.8 10.6,-16.1 0.1,-0.5 1,-0.5 1,0 v 8.9 c 0,5.7 -5.3,10.9 -11.4,17 z m 21.9,23 c 0,-5.7 5,-10.9 11.1,-17 l 6.7,-6.7 c 4.4,-4.4 13.8,-13.8 9.9,-22.6 -0.3,-0.6 0.2,-0.9 0.6,-0.4 5.9,7.2 3.9,18.4 -7.7,30 l -9.5,9.5 c -6,6 -8.8,8.9 -10.3,16.2 -0.1,0.5 -0.7,0.5 -0.7,0 v -9 z" />
+                            </g>
+                          </g>
+                        </svg>
                       </div>
+                      <h2 style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Admin Portal</h2>
+                      <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.88rem', marginTop: '0.35rem' }}>
+                        Seattle International Church � Staff Access
+                      </p>
+                    </div>
+
+                    {/* Form area */}
+                    <div style={{ padding: '2rem' }}>
                       <form onSubmit={handleAdminLogin}>
                         <div className="form-group">
-                          <label>Username</label>
+                          <label style={{ fontWeight: 600, fontSize: '0.88rem', color: '#374151' }}>Username</label>
                           <input
                             type="text"
                             value={adminLoginForm.username}
                             onChange={e => setAdminLoginForm({ ...adminLoginForm, username: e.target.value })}
                             required
-                            placeholder="Enter username"
+                            placeholder="Enter your username"
                             autoComplete="username"
+                            autoFocus
+                            style={{ fontSize: '0.95rem' }}
                           />
                         </div>
                         <div className="form-group">
-                          <label>Password</label>
+                          <label style={{ fontWeight: 600, fontSize: '0.88rem', color: '#374151' }}>Password</label>
                           <div style={{ position: 'relative' }}>
                             <input
                               type={showAdminPassword ? 'text' : 'password'}
                               value={adminLoginForm.password}
                               onChange={e => setAdminLoginForm({ ...adminLoginForm, password: e.target.value })}
                               required
-                              placeholder="Enter password"
+                              placeholder="Enter your password"
                               autoComplete="current-password"
-                              style={{ paddingRight: '3rem' }}
+                              style={{ paddingRight: '3rem', fontSize: '0.95rem' }}
                             />
                             <button
                               type="button"
-                              onClick={() => setShowAdminPassword((visible) => !visible)}
+                              onClick={() => setShowAdminPassword((v) => !v)}
                               aria-label={showAdminPassword ? 'Hide password' : 'Show password'}
                               aria-pressed={showAdminPassword}
                               style={{
-                                position: 'absolute',
-                                right: '0.5rem',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                border: 'none',
-                                background: 'transparent',
-                                color: 'var(--text-muted)',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '0.25rem',
+                                position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)',
+                                border: 'none', background: 'transparent', color: '#6b7280',
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.25rem',
                               }}
                             >
                               {showAdminPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                           </div>
                         </div>
+
                         {adminLoginError && (
-                          <div className="alert-danger margin-top-1" style={{ marginBottom: '1rem', fontSize: '0.88rem' }}>
+                          <div className="alert-danger" style={{ marginBottom: '1rem', fontSize: '0.88rem', borderRadius: '8px' }}>
                             {adminLoginError}
                           </div>
                         )}
-                        <button type="submit" className="btn btn-primary btn-block" disabled={adminLoginLoading}>
-                          {adminLoginLoading ? 'Signing in...' : 'Sign In to Admin Portal'}
+
+                        <button
+                          type="submit"
+                          className="btn btn-primary btn-block"
+                          disabled={adminLoginLoading}
+                          style={{
+                            padding: '0.85rem',
+                            fontSize: '1rem',
+                            fontWeight: 600,
+                            borderRadius: '8px',
+                            marginTop: '0.5rem',
+                            background: adminLoginLoading ? '#93c5fd' : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)',
+                            transition: 'opacity 0.2s',
+                          }}
+                        >
+                          {adminLoginLoading ? (
+                            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                              </svg>
+                              Signing in...
+                            </span>
+                          ) : 'Sign In to Admin Portal'}
                         </button>
                       </form>
-                      <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        Only staff accounts can access the admin portal.
-                      </p>
-                    </motion.div>
-                  </div>
+
+                      {/* Footer trust line */}
+                      <div style={{ textAlign: 'center', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid #e5e7eb' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: '#6b7280', fontSize: '0.8rem' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                          Authorized church staff only
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
                 </div>
               </>
             ) : (
               /* ---- Authenticated Admin Dashboard ---- */
               <>
-            <div className="page-header">
-              <div className="container text-center">
-                <h1>Admin Dashboard</h1>
-                <p>Church Management and Request Portal</p>
+            {/* Slim admin top-bar */}
+            <div style={{
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
+              padding: '0.65rem 0',
+              borderBottom: '1px solid rgba(212,175,55,0.3)',
+            }}>
+              <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                  {/* Church logo � white circle background for clarity */}
+                  <div style={{
+                    width: '44px', height: '44px', borderRadius: '50%',
+                    background: '#fff', border: '2px solid rgba(212,175,55,0.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0, overflow: 'hidden',
+                    boxShadow: '0 0 0 3px rgba(212,175,55,0.15)',
+                  }}>
+                    <svg width="40" height="40" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="85" cy="85" r="85" fill="#1E3A8A" />
+                      <g transform="translate(17,17) scale(0.8)"><g transform="translate(-20.5,-20.6)" fill="#D4AF37">
+                        <path d="m 128.7,161.7 c -11.5,-1.9 -17.7,3.5 -19.6,8.6 -0.2,0.5 -0.7,0.4 -0.7,0 v -1.6 c 0,-5.7 5.1,-10.9 11.1,-17 l 10,-10 26.6,4.6 c 0,0 7.6,7.6 14.1,14.1 12.5,-14.8 20.1,-34 20.1,-54.9 0,-46.9 -38,-84.9 -84.9,-84.9 -46.9,0 -84.9,38 -84.9,84.9 0,20.9 7.6,40.1 20.1,54.9 6.5,-6.5 14.1,-14.1 14.1,-14.1 l 30.2,-5.2 c 14,-2.4 17.5,0.7 17.5,5.4 0,0.2 -0.2,0.4 -0.4,0.4 h -8.5 c -0.2,0 -0.2,0.2 -0.2,0.4 v 5.2 c 0,0.2 -0.2,0.2 0,0.2 h 8.7 c 0.2,0 0.4,0.2 0.4,0.4 0,0 0,16.9 0,17.3 0,0.4 -0.5,0.5 -0.7,0.1 -1.9,-5.1 -8.1,-10.5 -19.6,-8.6 0,0 -19.9,3.4 -34.7,6 15.2,14.1 35.5,22.8 57.9,22.8 22.4,0 42.7,-8.6 57.9,-22.8 -14.6,-2.8 -34.5,-6.2 -34.5,-6.2 z" />
+                      </g></g>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ color: '#fff', fontWeight: 700, fontSize: '1rem', lineHeight: 1.2 }}>Admin Dashboard</div>
+                    <div style={{ color: 'rgba(212,175,55,0.9)', fontSize: '0.75rem' }}>Seattle International Church</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.85)', fontSize: '0.85rem' }}>
+                    <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(212,175,55,0.25)', border: '1px solid rgba(212,175,55,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#D4AF37' }}>
+                      {(localStorage.getItem('admin_username') || 'A')[0].toUpperCase()}
+                    </div>
+                    <span>{localStorage.getItem('admin_username') || 'Admin'}</span>
+                  </div>
+                  <button onClick={handleAdminLogout} style={{ background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.35)', color: '#fca5a5', padding: '0.35rem 0.85rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
+                    Sign Out
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="section-padding">
+            <div className="section-padding" style={{ paddingTop: '1.5rem' }}>
               <div className="container admin-container">
                 <div className="admin-sidebar card">
                   <h3 className="admin-sidebar-title">Navigation</h3>
@@ -6071,8 +7156,8 @@ export default function App({ entryMode }: AppProps = {}) {
                         </button>
                       </li>
                     ))}
-                    <li style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                      <button onClick={handleAdminLogout} className="admin-tab-btn" style={{ color: '#DC2626', width: '100%', textAlign: 'left' }}>
+                    <li style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(212,175,55,0.25)' }}>
+                      <button onClick={handleAdminLogout} className="admin-tab-btn" style={{ color: '#fca5a5' }}>
                         🚪 Sign Out
                       </button>
                     </li>
@@ -6083,89 +7168,141 @@ export default function App({ entryMode }: AppProps = {}) {
                   {/* Account Registration Tab */}
                   {activeAdminTab === 'admin-accounts' && (
                     <div className="admin-tab-content active">
-                      <h2>Registration Accounts</h2>
-                      <p className="text-muted">Super admin creates staff accounts and assigns exactly which data each account can access.</p>
+                      <h2>Staff Accounts</h2>
+                      <p className="text-muted">Create department staff accounts. Each account gets access based on their department role.</p>
 
-                      <form onSubmit={handleCreateAdminAccount} className="card margin-top-2" style={{ padding: '1.25rem' }}>
-                        <div className="grid grid-2 gap-2">
-                          <div className="form-group">
-                            <label>Full Name</label>
-                            <input
-                              type="text"
-                              value={adminAccountForm.full_name}
-                              onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, full_name: e.target.value }))}
-                              placeholder="e.g. Jane Doe"
-                            />
+                      <form onSubmit={handleCreateAdminAccount} className="card margin-top-2" style={{ padding: '1.5rem', border: '1px solid #e5e7eb' }}>
+                        <h3 style={{ marginBottom: '0.25rem' }}>New Staff Account</h3>
+                        <p className="text-muted" style={{ fontSize: '0.88rem', marginBottom: '1.25rem' }}>Select a department first � access sections will be filled automatically.</p>
+
+                        {/* Step 1: Department selector cards */}
+                        <div style={{ marginBottom: '1.5rem' }}>
+                          <label style={{ fontWeight: 600, fontSize: '0.88rem', color: '#374151', display: 'block', marginBottom: '0.75rem' }}>
+                            1. Select Department *
+                          </label>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.6rem' }}>
+                            {DEPARTMENT_PRESETS.map((dept) => {
+                              const isSelected = adminAccountForm.department_role === dept.role;
+                              return (
+                                <button
+                                  key={dept.role}
+                                  type="button"
+                                  onClick={() => setAdminAccountForm((prev) => ({
+                                    ...prev,
+                                    department_role: dept.role,
+                                    access_sections: dept.sections,
+                                    sabbath_programme_scope: dept.sections.includes('sabbath_programme') ? 'full' : prev.sabbath_programme_scope,
+                                  }))}
+                                  style={{
+                                    textAlign: 'left',
+                                    padding: '0.85rem 0.75rem',
+                                    borderRadius: '10px',
+                                    border: `2px solid ${isSelected ? dept.color : '#e5e7eb'}`,
+                                    background: isSelected ? `${dept.color}10` : '#fff',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    boxShadow: isSelected ? `0 0 0 3px ${dept.color}30` : 'none',
+                                  }}
+                                >
+                                  <div style={{ fontSize: '1.4rem', marginBottom: '0.35rem' }}>{dept.icon}</div>
+                                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: isSelected ? dept.color : '#111827', marginBottom: '0.2rem', lineHeight: 1.3 }}>{dept.label}</div>
+                                  <div style={{ fontSize: '0.73rem', color: '#6b7280', lineHeight: 1.35 }}>{dept.description}</div>
+                                  {isSelected && (
+                                    <div style={{ marginTop: '0.4rem', fontSize: '0.72rem', fontWeight: 600, color: dept.color }}>? Selected</div>
+                                  )}
+                                </button>
+                              );
+                            })}
                           </div>
-                          <div className="form-group">
-                            <label>Username *</label>
-                            <input
-                              type="text"
-                              value={adminAccountForm.username}
-                              onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, username: e.target.value }))}
-                              required
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Email *</label>
-                            <input
-                              type="email"
-                              value={adminAccountForm.email}
-                              onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, email: e.target.value }))}
-                              required
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Temporary Password *</label>
-                            <input
-                              type="text"
-                              value={adminAccountForm.password}
-                              onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, password: e.target.value }))}
-                              required
-                            />
-                          </div>
-                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                            <label>Data Access Rights *</label>
-                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
-                              {ACCESS_RIGHT_OPTIONS.map((section) => (
-                                <label key={section.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.9rem' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={adminAccountForm.access_sections.includes(section.id)}
-                                    onChange={(e) => {
-                                      setAdminAccountForm((prev) => {
-                                        const next = new Set(prev.access_sections);
-                                        if (e.target.checked) {
-                                          next.add(section.id);
-                                        } else {
-                                          next.delete(section.id);
-                                        }
-                                        return { ...prev, access_sections: Array.from(next) };
-                                      });
-                                    }}
-                                  />
-                                  {section.label}
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                          {adminAccountForm.access_sections.includes('sabbath_programme') && (
-                            <div className="form-group">
-                              <label>Sabbath Programme Scope</label>
-                              <select
-                                value={adminAccountForm.sabbath_programme_scope}
-                                onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, sabbath_programme_scope: e.target.value as SabbathProgrammeScope }))}
-                              >
-                                <option value="full">Full Sabbath Programme Access</option>
-                                <option value="sabbath_school_only">Sabbath School Fields Only</option>
-                              </select>
-                            </div>
-                          )}
                         </div>
 
-                        <button type="submit" className="btn btn-accent" disabled={creatingAdminAccount}>
-                          {creatingAdminAccount ? 'Creating...' : 'Create Department Account'}
-                        </button>
+                        {/* Step 2: Account details */}
+                        {adminAccountForm.department_role && (
+                          <>
+                            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1.25rem', marginBottom: '1rem' }}>
+                              <label style={{ fontWeight: 600, fontSize: '0.88rem', color: '#374151', display: 'block', marginBottom: '0.75rem' }}>
+                                2. Account Details
+                              </label>
+                              <div className="grid grid-2 gap-2">
+                                <div className="form-group">
+                                  <label>Full Name</label>
+                                  <input type="text" value={adminAccountForm.full_name} onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, full_name: e.target.value }))} placeholder="e.g. Jane Doe" />
+                                </div>
+                                <div className="form-group">
+                                  <label>Username *</label>
+                                  <input type="text" value={adminAccountForm.username} onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, username: e.target.value }))} required />
+                                </div>
+                                <div className="form-group">
+                                  <label>Email *</label>
+                                  <input type="email" value={adminAccountForm.email} onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, email: e.target.value }))} required />
+                                </div>
+                                <div className="form-group">
+                                  <label>Temporary Password *</label>
+                                  <input type="text" value={adminAccountForm.password} onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, password: e.target.value }))} required />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Step 3: Section fine-tuning */}
+                            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1.25rem', marginBottom: '1.25rem' }}>
+                              <label style={{ fontWeight: 600, fontSize: '0.88rem', color: '#374151', display: 'block', marginBottom: '0.5rem' }}>
+                                3. Fine-tune Access Sections
+                              </label>
+                              <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.75rem' }}>
+                                Pre-filled based on department. Adjust as needed.
+                              </p>
+                              <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+                                {ACCESS_RIGHT_OPTIONS.map((section) => {
+                                  const checked = adminAccountForm.access_sections.includes(section.id);
+                                  const preset = DEPARTMENT_PRESETS.find(d => d.role === adminAccountForm.department_role);
+                                  const isDefault = preset?.sections.includes(section.id);
+                                  return (
+                                    <label key={section.id} style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                                      fontSize: '0.82rem', padding: '0.3rem 0.6rem',
+                                      borderRadius: '20px', border: `1px solid ${checked ? (isDefault ? '#1e3a8a' : '#7c3aed') : '#e5e7eb'}`,
+                                      background: checked ? (isDefault ? '#eff6ff' : '#f5f3ff') : '#fff',
+                                      cursor: 'pointer',
+                                    }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={(e) => {
+                                          setAdminAccountForm((prev) => {
+                                            const next = new Set(prev.access_sections);
+                                            if (e.target.checked) next.add(section.id); else next.delete(section.id);
+                                            return { ...prev, access_sections: Array.from(next) };
+                                          });
+                                        }}
+                                        style={{ display: 'none' }}
+                                      />
+                                      {checked ? '? ' : ''}{section.label}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              {adminAccountForm.access_sections.includes('sabbath_programme') && (
+                                <div className="form-group" style={{ marginTop: '0.75rem', maxWidth: '300px' }}>
+                                  <label>Sabbath Programme Scope</label>
+                                  <select value={adminAccountForm.sabbath_programme_scope} onChange={(e) => setAdminAccountForm((prev) => ({ ...prev, sabbath_programme_scope: e.target.value as SabbathProgrammeScope }))}>
+                                    <option value="full">Full Sabbath Programme Access</option>
+                                    <option value="sabbath_school_only">Sabbath School Fields Only</option>
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+
+                            <button type="submit" className="btn btn-primary" disabled={creatingAdminAccount} style={{ minWidth: '200px' }}>
+                              {creatingAdminAccount ? 'Creating...' : `Create ${DEPARTMENT_PRESETS.find(d => d.role === adminAccountForm.department_role)?.label ?? ''} Account`}
+                            </button>
+                          </>
+                        )}
+
+                        {!adminAccountForm.department_role && (
+                          <p style={{ color: '#9ca3af', fontSize: '0.88rem', fontStyle: 'italic' }}>
+                            ? Select a department above to continue.
+                          </p>
+                        )}
                       </form>
 
                       <div className="margin-top-3">
@@ -6364,7 +7501,7 @@ export default function App({ entryMode }: AppProps = {}) {
                   {activeAdminTab === 'admin-gallery' && (
                     <div className="admin-tab-content active">
                       <h2>Manage Gallery</h2>
-                      <p className="text-muted">Upload church photos directly to Supabase cloud storage. They will appear instantly in the Gallery page.</p>
+                      <p className="text-muted">Upload church photos to storage, then save the gallery record in the backend so the public page and admin stay in sync.</p>
                       <form onSubmit={handleGalleryUpload} className="card margin-top-2" style={{ padding: '1.5rem' }}>
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
@@ -6411,7 +7548,7 @@ export default function App({ entryMode }: AppProps = {}) {
                           )}
                         </div>
                         <button type="submit" className="btn btn-primary margin-top-2" disabled={galleryUploading}>
-                          {galleryUploading ? '⏳ Uploading...' : '📤 Upload to Supabase'}
+                          {galleryUploading ? '? Uploading...' : '?? Add to Gallery'}
                         </button>
                       </form>
 
@@ -6439,12 +7576,12 @@ export default function App({ entryMode }: AppProps = {}) {
                   {/* ===================== LESSON VIDEOS TAB ===================== */}
                   {activeAdminTab === 'admin-lessons' && (
                     <div className="admin-tab-content active">
-                      <h2>🎬 Lesson Videos</h2>
+                      <h2>?? Lesson Videos</h2>
                       <p className="text-muted">Upload the YouTube discussion video for each Sabbath School lesson week. Paste any YouTube URL or just the video ID. Changes will appear immediately on the Bible Study page for all members.</p>
 
                       {/* Add Video Form */}
                       <form onSubmit={handleAdminAddLessonVideo} className="card margin-top-3" style={{ padding: '1.75rem', borderLeft: '4px solid var(--accent)' }}>
-                        <h3 style={{ marginBottom: '1.25rem', color: 'var(--primary-dark)' }}>➕ Add Weekly Lesson Video</h3>
+                        <h3 style={{ marginBottom: '1.25rem', color: 'var(--primary-dark)' }}>? Add Weekly Lesson Video</h3>
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
                             <label>Week Number</label>
@@ -6488,7 +7625,7 @@ export default function App({ entryMode }: AppProps = {}) {
                             placeholder="e.g. https://www.youtube.com/watch?v=ABC123xyz or just ABC123xyz"
                           />
                           <small style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                            Paste the full YouTube link — the video ID will be extracted automatically.
+                            Paste the full YouTube link � the video ID will be extracted automatically.
                           </small>
                         </div>
                         <div className="form-group">
@@ -6502,13 +7639,13 @@ export default function App({ entryMode }: AppProps = {}) {
                           />
                         </div>
                         <button type="submit" className="btn btn-accent btn-block">
-                          📤 Upload Lesson Video
+                          ?? Upload Lesson Video
                         </button>
                       </form>
 
                       {/* Current Lessons List */}
                       <div className="margin-top-3">
-                        <h3 style={{ marginBottom: '1rem' }}>📋 Currently Uploaded Lesson Videos ({lessonVideos.length})</h3>
+                        <h3 style={{ marginBottom: '1rem' }}>?? Currently Uploaded Lesson Videos ({lessonVideos.length})</h3>
                         {lessonVideos.length === 0 ? (
                           <p className="text-muted">No lesson videos uploaded yet. Use the form above to add the first one.</p>
                         ) : (
@@ -6523,7 +7660,7 @@ export default function App({ entryMode }: AppProps = {}) {
                                     <strong style={{ fontSize: '0.95rem' }}>{v.title}</strong>
                                   </div>
                                   <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                                    📅 {v.date} &nbsp;|&nbsp; 🔗 youtube.com/watch?v={v.youtubeId}
+                                    ?? {v.date} &nbsp;|&nbsp; ?? youtube.com/watch?v={v.youtubeId}
                                   </p>
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
@@ -6534,14 +7671,14 @@ export default function App({ entryMode }: AppProps = {}) {
                                     rel="noopener noreferrer"
                                     className="btn btn-outline btn-small"
                                   >
-                                    ▶️ Preview
+                                    ?? Preview
                                   </a>
                                   <button
                                     onClick={() => handleAdminDeleteLessonVideo(v.id, v.week)}
                                     className="btn btn-small"
                                     style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', cursor: 'pointer' }}
                                   >
-                                    🗑️ Remove
+                                    ??? Remove
                                   </button>
                                 </div>
                               </div>
@@ -6555,7 +7692,7 @@ export default function App({ entryMode }: AppProps = {}) {
                   {/* Sabbath Programme Tab */}
                   {activeAdminTab === 'admin-sabbath-programme' && (
                     <div className="admin-tab-content active">
-                      <h2>🗓️ Sabbath Programme Management</h2>
+                      <h2>??? Sabbath Programme Management</h2>
                       <p className="text-muted">
                         Manage Sabbath programme information directly. Changes appear immediately on the Sabbath Programme page.
                       </p>
@@ -6597,9 +7734,6 @@ export default function App({ entryMode }: AppProps = {}) {
                             ))}
                           </select>
                         </div>
-
-                        <details open style={{ marginBottom: '1rem' }}>
-                          <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.9rem' }}>Core Entry Information</summary>
 
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
@@ -6643,11 +7777,6 @@ export default function App({ entryMode }: AppProps = {}) {
                           </div>
                         </div>
 
-                        </details>
-
-                        <details open style={{ marginBottom: '1rem' }}>
-                          <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.9rem' }}>Sabbath School Section</summary>
-
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
                             <label>Superintendent</label>
@@ -6658,69 +7787,12 @@ export default function App({ entryMode }: AppProps = {}) {
                             />
                           </div>
                           <div className="form-group">
-                            <label>Assistant Superintendent</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.assistantSuperintendent}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, assistantSuperintendent: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Secretary</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.secretary}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, secretary: e.target.value }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Lesson Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.lessonLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, lessonLeader: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Sabbath School Song Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.sabbathSchoolSongLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sabbathSchoolSongLeader: e.target.value }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Sabbath School Opening Prayer</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.sabbathSchoolOpeningPrayer}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sabbathSchoolOpeningPrayer: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
                             <label>Lesson Number</label>
                             <input
                               type="number"
                               min="1"
                               value={sabbathProgramForm.lessonNumber}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, lessonNumber: parseInt(e.target.value || '1', 10) }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Quarter / Series Label</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.quarter}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, quarter: e.target.value }))}
                             />
                           </div>
                         </div>
@@ -6736,167 +7808,20 @@ export default function App({ entryMode }: AppProps = {}) {
 
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
-                            <label>Memory Verse Reference</label>
+                            <label>Song Leader</label>
                             <input
                               type="text"
-                              value={sabbathProgramForm.memoryVerseRef}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, memoryVerseRef: e.target.value }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Discussion Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.discussionLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, discussionLeader: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="form-group">
-                          <label>Memory Verse</label>
-                          <textarea
-                            value={sabbathProgramForm.memoryVerse}
-                            onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, memoryVerse: e.target.value }))}
-                            rows={3}
-                          />
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Mission Spotlight</label>
-                            <textarea
-                              value={sabbathProgramForm.missionSpotlight}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, missionSpotlight: e.target.value }))}
-                              rows={3}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Offering Designation</label>
-                            <textarea
-                              value={sabbathProgramForm.offeringDesignation}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, offeringDesignation: e.target.value }))}
-                              rows={3}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="form-group">
-                          <label>Opening Songs</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'number', label: 'Hymn Number', placeholder: '7' },
-                              { key: 'title', label: 'Title', placeholder: 'From All That Dwell Below the Skies' },
-                            ]}
-                            value={sabbathProgramForm.openingSongs}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, openingSongs: value }))}
-                            parseRows={(value) => parseOpeningSongs(value).map((item) => ({ number: item.number, title: item.title }))}
-                            serializeRows={serializeOpeningSongRows}
-                            addLabel="Add Opening Song"
-                            helperText="Each row becomes one opening song item on the public page."
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Daily Readings</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'day', label: 'Day', placeholder: 'Sunday' },
-                              { key: 'title', label: 'Reading Title', placeholder: 'The Veil Was Torn' },
-                              { key: 'text', label: 'Text', placeholder: 'Matthew 27:51; Hebrews 10:19-22' },
-                            ]}
-                            value={sabbathProgramForm.dailyReadings}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, dailyReadings: value }))}
-                            parseRows={(value) => parseDailyReadings(value).map((item) => ({ day: item.day, title: item.title, text: item.text }))}
-                            serializeRows={serializeDailyReadingRows}
-                            addLabel="Add Daily Reading"
-                            helperText="These rows populate the weekly lesson reading list."
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Classes and Teachers</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'name', label: 'Class Name', placeholder: 'Youth' },
-                              { key: 'ageRange', label: 'Age Range', placeholder: '16 - 25 yrs' },
-                              { key: 'teacher', label: 'Teacher', placeholder: 'Bro. Twine Enok' },
-                              { key: 'room', label: 'Room', placeholder: 'Chapel Annex' },
-                            ]}
-                            value={sabbathProgramForm.classes}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, classes: value }))}
-                            parseRows={(value) => parseClasses(value).map((item) => ({ name: item.name, ageRange: item.ageRange, teacher: item.teacher, room: item.room }))}
-                            serializeRows={serializeClassRows}
-                            addLabel="Add Class"
-                            helperText="Use one row per Sabbath School class."
-                          />
-                        </div>
-
-                        </details>
-
-                        <hr style={{ margin: '1rem 0', border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-                        <details open style={{ marginBottom: '1rem' }}>
-                          <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.9rem' }}>Divine Service and Sermon</summary>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Divine Service Song Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.divineSongLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, divineSongLeader: e.target.value }))}
+                              value={sabbathProgramForm.songLeader}
+                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, songLeader: e.target.value }))}
                               disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                           <div className="form-group">
-                            <label>Divine Service Opening Prayer</label>
+                            <label>Opening Prayer</label>
                             <input
                               type="text"
-                              value={sabbathProgramForm.divineOpeningPrayer}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, divineOpeningPrayer: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Organist</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.organist}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, organist: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Worship Coordinator</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.worshipCoordinator}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, worshipCoordinator: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Tithes and Offering</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.tithesOffering}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, tithesOffering: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Welcome and Announcements</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.welcomeAndAnnouncements}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, welcomeAndAnnouncements: e.target.value }))}
+                              value={sabbathProgramForm.openingPrayer}
+                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, openingPrayer: e.target.value }))}
                               disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
@@ -6953,49 +7878,6 @@ export default function App({ entryMode }: AppProps = {}) {
                           />
                         </div>
 
-                        <div className="form-group">
-                          <label>Worship Hymns</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'number', label: 'Hymn Number', placeholder: '67' },
-                              { key: 'title', label: 'Title', placeholder: 'Holy, Holy, Holy! Lord God Almighty' },
-                              { key: 'book', label: 'Book', placeholder: 'Bridge Hymnal' },
-                              { key: 'moment', label: 'Moment', placeholder: 'Hymn of Praise' },
-                            ]}
-                            value={sabbathProgramForm.hymns}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, hymns: value }))}
-                            parseRows={(value) => parseHymns(value).map((item) => ({ number: item.number, title: item.title, book: item.book, moment: item.moment }))}
-                            serializeRows={serializeHymnRows}
-                            addLabel="Add Worship Hymn"
-                            helperText="These rows drive the worship hymns section on the page."
-                            disabled={sabbathSchoolOnlyAccess}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Special Items</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'group', label: 'Group', placeholder: 'Seattle International Choir' },
-                              { key: 'song', label: 'Song', placeholder: 'How Great Thou Art' },
-                              { key: 'type', label: 'Type', placeholder: 'Choir Anthem' },
-                              { key: 'color', label: 'Color', placeholder: '#8B5CF6' },
-                            ]}
-                            value={sabbathProgramForm.specialItems}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, specialItems: value }))}
-                            parseRows={(value) => parseSpecialItems(value).map((item) => ({ group: item.group, song: item.song, type: item.type, color: item.color }))}
-                            serializeRows={serializeSpecialItemRows}
-                            addLabel="Add Special Item"
-                            helperText="Use a hex color if you want the item card tint to change."
-                            disabled={sabbathSchoolOnlyAccess}
-                          />
-                        </div>
-
-                        </details>
-
-                        <details open style={{ marginBottom: '1rem' }}>
-                          <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.9rem' }}>Closing and Afternoon Programme</summary>
-
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
                             <label>Closing Prayer</label>
@@ -7038,75 +7920,6 @@ export default function App({ entryMode }: AppProps = {}) {
                           </div>
                         </div>
 
-                        <div className="form-group">
-                          <label>Afternoon Prayer Focus</label>
-                          <input
-                            type="text"
-                            value={sabbathProgramForm.afternoonPrayerFocus}
-                            onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, afternoonPrayerFocus: e.target.value }))}
-                            disabled={sabbathSchoolOnlyAccess}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Prayer Points</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'value', label: 'Prayer Point', placeholder: 'Pray for students sitting end-of-semester exams this week' },
-                            ]}
-                            value={sabbathProgramForm.afternoonPrayerPoints}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, afternoonPrayerPoints: value }))}
-                            parseRows={(value) => parseStructuredLines(value).map((item) => ({ value: item }))}
-                            serializeRows={serializeSingleValueRows}
-                            addLabel="Add Prayer Point"
-                            helperText="Each row becomes one afternoon prayer point."
-                            disabled={sabbathSchoolOnlyAccess}
-                          />
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Discussion Topic</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.discussionTopic}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, discussionTopic: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Discussion Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.afternoonDiscussionLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, afternoonDiscussionLeader: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="form-group">
-                          <label>Discussion Anchor Text</label>
-                          <textarea
-                            value={sabbathProgramForm.discussionText}
-                            onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, discussionText: e.target.value }))}
-                            disabled={sabbathSchoolOnlyAccess}
-                            rows={3}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Discussion Summary</label>
-                          <textarea
-                            value={sabbathProgramForm.discussionSummary}
-                            onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, discussionSummary: e.target.value }))}
-                            disabled={sabbathSchoolOnlyAccess}
-                            rows={5}
-                          />
-                        </div>
-
-                        </details>
-
                         <hr style={{ margin: '1rem 0', border: 'none', borderTop: '1px solid var(--border-color)' }} />
 
                         <details>
@@ -7143,402 +7956,565 @@ export default function App({ entryMode }: AppProps = {}) {
                         )}
 
                         <p className="text-muted" style={{ marginTop: '0.75rem', fontSize: '0.8rem' }}>
-                          All visible Sabbath Programme page content is editable above. Keep the advanced JSON editor for bulk edits or structure-level fixes.
+                          Core fields here cover the main displayed programme information. Use the advanced editor for hymns, prayer points, and detailed nested sections.
                         </p>
                       </div>
                     </div>
                   )}
 
                   {/* Projects Tab */}
-                  {activeAdminTab === 'admin-projects' && (
-
+                  {activeAdminTab === 'admin-projects' && (() => {
+                    const totalRaised = projects.reduce((s, p) => s + p.raised_amount, 0);
+                    const totalGoal = projects.reduce((s, p) => s + p.goal_amount, 0);
+                    const activeCount = projects.filter(p => p.status === 'Active').length;
+                    const publishedCount = projects.filter(p => p.is_published !== false).length;
+                    const allCategories = ['All', ...Array.from(new Set(projects.map(p => p.category).filter(Boolean)))];
+                    const allStatuses = ['All', 'Active', 'Almost Complete', 'Completed', 'Paused'];
+                    const visibleProjects = projects.filter(proj => {
+                      const q = projectSearch.toLowerCase();
+                      const matchQ = !q || proj.title.toLowerCase().includes(q) || proj.desc?.toLowerCase().includes(q) || proj.category?.toLowerCase().includes(q);
+                      const matchCat = projectCategoryFilter === 'All' || proj.category === projectCategoryFilter;
+                      const matchSt = projectStatusFilter === 'All' || proj.status === projectStatusFilter;
+                      return matchQ && matchCat && matchSt;
+                    });
+                    return (
                     <div className="admin-tab-content active">
-                      <h2>Manage Projects</h2>
-                      <p className="text-muted">Create new projects, update fundraising progress, and remove completed or incorrect entries.</p>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Manage Projects</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Create, update fundraising progress, and remove church projects.</p>
+                        </div>
+                        <button onClick={() => setShowAddEventModal(v => !v)} className="btn btn-primary btn-small">
+                          {showAddEventModal ? '? Cancel' : '+ New Project'}
+                        </button>
+                      </div>
 
-                      <form onSubmit={handleAdminAddProject} className="card margin-top-2" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent)' }}>
-                        <h3 style={{ marginBottom: '1rem' }}>➕ Add New Project</h3>
-                        <div className="grid grid-2 gap-3">
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total Projects', value: projects.length, color: '#1e3a8a', bg: '#eff6ff' },
+                          { label: 'Active', value: activeCount, color: '#059669', bg: '#ecfdf5' },
+                          { label: 'Published', value: publishedCount, color: '#0891b2', bg: '#ecfeff' },
+                          { label: 'Total Raised', value: `${totalRaised.toLocaleString()} UGX`, color: '#d97706', bg: '#fffbeb' },
+                          { label: 'Total Goal', value: `${totalGoal.toLocaleString()} UGX`, color: '#7c3aed', bg: '#f5f3ff' },
+                        ].map(({ label, value, color, bg }) => (
+                          <div key={label} style={{ padding: '0.75rem 1rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, flex: 1, minWidth: '120px' }}>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add Project Form */}
+                      {showAddEventModal && (
+                      <form onSubmit={handleAdminAddProject} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+                        <h3 style={{ marginBottom: '1rem', color: '#1e3a8a', fontSize: '0.95rem' }}>??? New Project</h3>
+                        <div className="grid grid-2 gap-2">
                           <div className="form-group">
-                            <label>Project Title</label>
-                            <input
-                              type="text"
-                              value={addProjectForm.title}
-                              onChange={(e) => setAddProjectForm((f) => ({ ...f, title: e.target.value }))}
-                              required
-                            />
+                            <label>Project Title *</label>
+                            <input type="text" value={addProjectForm.title} onChange={(e) => setAddProjectForm((f) => ({ ...f, title: e.target.value }))} required placeholder="e.g. Church Sanctuary Construction" />
                           </div>
                           <div className="form-group">
                             <label>Category</label>
-                            <select
-                              value={addProjectForm.category}
-                              onChange={(e) => setAddProjectForm((f) => ({ ...f, category: e.target.value }))}
-                            >
-                              {['Construction', 'Community', 'Outreach', 'Education', 'Media', 'Operations'].map((category) => (
-                                <option key={category} value={category}>{category}</option>
-                              ))}
+                            <select value={addProjectForm.category} onChange={(e) => setAddProjectForm((f) => ({ ...f, category: e.target.value }))}>
+                              {['Construction', 'Community', 'Outreach', 'Education', 'Media', 'Operations'].map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                           </div>
-                        </div>
-
-                        <div className="form-group">
-                          <label>Description</label>
-                          <textarea
-                            rows={3}
-                            value={addProjectForm.desc}
-                            onChange={(e) => setAddProjectForm((f) => ({ ...f, desc: e.target.value }))}
-                            required
-                          />
-                        </div>
-
-                        <div className="grid grid-3 gap-3">
+                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                            <label>Description *</label>
+                            <textarea rows={3} value={addProjectForm.desc} onChange={(e) => setAddProjectForm((f) => ({ ...f, desc: e.target.value }))} required placeholder="Describe the project�" />
+                          </div>
                           <div className="form-group">
-                            <label>Goal Amount (UGX)</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={addProjectForm.goal_amount}
-                              onChange={(e) => setAddProjectForm((f) => ({ ...f, goal_amount: e.target.value }))}
-                              required
-                            />
+                            <label>Goal Amount (UGX) *</label>
+                            <input type="number" min="1" value={addProjectForm.goal_amount} onChange={(e) => setAddProjectForm((f) => ({ ...f, goal_amount: e.target.value }))} required />
                           </div>
                           <div className="form-group">
                             <label>Raised Amount (UGX)</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={addProjectForm.raised_amount}
-                              onChange={(e) => setAddProjectForm((f) => ({ ...f, raised_amount: e.target.value }))}
-                            />
+                            <input type="number" min="0" value={addProjectForm.raised_amount} onChange={(e) => setAddProjectForm((f) => ({ ...f, raised_amount: e.target.value }))} />
                           </div>
                           <div className="form-group">
                             <label>Status</label>
-                            <select
-                              value={addProjectForm.status}
-                              onChange={(e) => setAddProjectForm((f) => ({ ...f, status: e.target.value }))}
-                            >
-                              {['Active', 'Almost Complete', 'Completed', 'Paused'].map((status) => (
-                                <option key={status} value={status}>{status}</option>
-                              ))}
+                            <select value={addProjectForm.status} onChange={(e) => setAddProjectForm((f) => ({ ...f, status: e.target.value }))}>
+                              {['Active', 'Almost Complete', 'Completed', 'Paused'].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                           </div>
+                          <div className="form-group">
+                            <label>Image</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                <input
+                                  type="url"
+                                  value={addProjectForm.image_url}
+                                  onChange={(e) => setAddProjectForm((f) => ({ ...f, image_url: e.target.value }))}
+                                  placeholder="Paste URL or upload below�"
+                                  style={{ flex: 1 }}
+                                />
+                                {addProjectForm.image_url && (
+                                  <img src={addProjectForm.image_url} alt="preview" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '5px', border: '1px solid #e2e8f0', flexShrink: 0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.opacity = '0.2'; }} />
+                                )}
+                              </div>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.82rem', color: '#1e3a8a', fontWeight: 600, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.3rem 0.7rem', width: 'fit-content' }}>
+                                ?? Choose File
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp,image/gif"
+                                  style={{ display: 'none' }}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      const url = await uploadProjectImage(file);
+                                      setAddProjectForm(f => ({ ...f, image_url: url }));
+                                      toast.success('Image uploaded.');
+                                    } catch (err: any) {
+                                      toast.error(err.message || 'Upload failed.');
+                                    }
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <input id="proj-pub" type="checkbox" checked={addProjectForm.is_published} onChange={(e) => setAddProjectForm((f) => ({ ...f, is_published: e.target.checked }))} />
+                            <label htmlFor="proj-pub" style={{ margin: 0, fontWeight: 500 }}>Publish to viewers</label>
+                          </div>
                         </div>
-
-                        <div className="form-group">
-                          <label>Image URL (optional)</label>
-                          <input
-                            type="url"
-                            value={addProjectForm.image_url}
-                            onChange={(e) => setAddProjectForm((f) => ({ ...f, image_url: e.target.value }))}
-                            placeholder="https://..."
-                          />
-                        </div>
-
-                        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                          <input
-                            id="project-published"
-                            type="checkbox"
-                            checked={addProjectForm.is_published}
-                            onChange={(e) => setAddProjectForm((f) => ({ ...f, is_published: e.target.checked }))}
-                          />
-                          <label htmlFor="project-published" style={{ margin: 0 }}>Publish this project to viewers</label>
-                        </div>
-
-                        <button type="submit" className="btn btn-accent btn-block">Save Project</button>
+                        <button type="submit" className="btn btn-primary" style={{ marginTop: '0.75rem' }}>Save Project</button>
                       </form>
+                      )}
 
-                      <div className="margin-top-2">
-                        {projects.map(proj => {
-                          const pct = Math.min(100, Math.round((proj.raised_amount / proj.goal_amount) * 100));
-                          const statusBg = proj.status === 'Active' ? '#d1fae5' : proj.status === 'Completed' ? '#dcfce7' : '#fef3c7';
-                          const statusColor = proj.status === 'Active' ? '#065f46' : proj.status === 'Completed' ? '#166534' : '#92400e';
+                      {/* Search & Filters */}
+                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.25rem', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="?? Search projects�"
+                          value={projectSearch}
+                          onChange={e => setProjectSearch(e.target.value)}
+                          style={{ flex: 1, minWidth: '180px', padding: '0.45rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.88rem' }}
+                        />
+                        <select
+                          value={projectCategoryFilter}
+                          onChange={e => setProjectCategoryFilter(e.target.value)}
+                          style={{ padding: '0.45rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', background: '#fff' }}
+                        >
+                          {allCategories.map(c => <option key={c} value={c}>{c === 'All' ? 'All Categories' : c}</option>)}
+                        </select>
+                        <select
+                          value={projectStatusFilter}
+                          onChange={e => setProjectStatusFilter(e.target.value)}
+                          style={{ padding: '0.45rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', background: '#fff' }}
+                        >
+                          {allStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
+                        </select>
+                        {(projectSearch || projectCategoryFilter !== 'All' || projectStatusFilter !== 'All') && (
+                          <button
+                            onClick={() => { setProjectSearch(''); setProjectCategoryFilter('All'); setProjectStatusFilter('All'); }}
+                            style={{ padding: '0.45rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.82rem', color: '#6b7280', cursor: 'pointer' }}
+                          >
+                            ? Clear
+                          </button>
+                        )}
+                        <span style={{ fontSize: '0.82rem', color: '#6b7280', marginLeft: 'auto' }}>
+                          {visibleProjects.length} of {projects.length} project{projects.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      {/* Project Cards */}
+                      {visibleProjects.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#6b7280', background: '#f8fafc', borderRadius: '10px', border: '1px dashed #e2e8f0' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>???</div>
+                          <p style={{ margin: 0 }}>{projects.length === 0 ? 'No projects yet. Add one above.' : 'No projects match your filters.'}</p>
+                        </div>
+                      ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {visibleProjects.map(proj => {
+                          const pct = proj.goal_amount > 0 ? Math.min(100, Math.round((proj.raised_amount / proj.goal_amount) * 100)) : 0;
+                          const isEditOpen = projectEditOpenIds.has(proj.id);
+                          const isHistoryOpen = openProjectHistoryId === proj.id;
+                          const statusColors: Record<string, { bg: string; color: string }> = {
+                            'Active':          { bg: '#d1fae5', color: '#065f46' },
+                            'Almost Complete': { bg: '#fef3c7', color: '#92400e' },
+                            'Completed':       { bg: '#dcfce7', color: '#166534' },
+                            'Paused':          { bg: '#f1f5f9', color: '#475569' },
+                          };
+                          const sc = statusColors[proj.status] ?? { bg: '#f1f5f9', color: '#475569' };
                           const allHistoryEntries = projectHistoryById[proj.id] ?? [];
                           const filteredHistoryEntries = projectHistoryFilter === 'all'
                             ? allHistoryEntries
                             : allHistoryEntries.filter((entry) => entry.action === projectHistoryFilter);
+                          const draft = projectDrafts[proj.id] ?? {
+                            title: proj.title,
+                            category: proj.category,
+                            desc: proj.desc,
+                            goal_amount: String(proj.goal_amount),
+                            raised_amount: String(proj.raised_amount),
+                            image_url: proj.image_url || '',
+                            status: proj.status,
+                            is_published: proj.is_published !== false,
+                          };
                           return (
-                            <div key={proj.id} className="card margin-top-2" style={{ padding: '1rem 1.25rem' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 1 }}>
-                                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--primary)', background: 'var(--bg-light, #f1f5f9)', padding: '0.2rem 0.6rem', borderRadius: '20px', marginBottom: '0.4rem', display: 'inline-block' }}>{proj.category}</span>
-                                  <h4 style={{ margin: '0.25rem 0' }}>{proj.title}</h4>
-                                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-                                    UGX {proj.raised_amount.toLocaleString()} / {proj.goal_amount.toLocaleString()} — <strong style={{ color: 'var(--primary)' }}>{pct}% funded</strong>
-                                  </p>
-                                  <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '3px', marginTop: '0.5rem' }}>
-                                    <div style={{ height: '100%', width: pct + '%', background: 'var(--primary)', borderRadius: '3px', transition: 'width 0.8s ease' }} />
-                                  </div>
-
-                                  <div className="grid grid-2 gap-2 margin-top-2">
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
-                                      <label style={{ fontSize: '0.75rem' }}>Title</label>
-                                      <input
-                                        type="text"
-                                        value={projectDrafts[proj.id]?.title ?? proj.title}
-                                        onChange={(e) => setProjectDrafts((prev) => ({
-                                          ...prev,
-                                          [proj.id]: {
-                                            ...(prev[proj.id] ?? {
-                                              title: proj.title,
-                                              category: proj.category,
-                                              desc: proj.desc,
-                                              goal_amount: String(proj.goal_amount),
-                                              raised_amount: String(proj.raised_amount),
-                                              image_url: proj.image_url || '',
-                                              status: proj.status,
-                                              is_published: proj.is_published !== false,
-                                            }),
-                                            title: e.target.value,
-                                          },
-                                        }))}
-                                      />
-                                    </div>
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
-                                      <label style={{ fontSize: '0.75rem' }}>Category</label>
-                                      <input
-                                        type="text"
-                                        value={projectDrafts[proj.id]?.category ?? proj.category}
-                                        onChange={(e) => setProjectDrafts((prev) => ({
-                                          ...prev,
-                                          [proj.id]: { ...(prev[proj.id] ?? projectDrafts[proj.id]), category: e.target.value },
-                                        }))}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="form-group" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
-                                    <label style={{ fontSize: '0.75rem' }}>Description</label>
-                                    <textarea
-                                      rows={2}
-                                      value={projectDrafts[proj.id]?.desc ?? proj.desc}
-                                      onChange={(e) => setProjectDrafts((prev) => ({
-                                        ...prev,
-                                        [proj.id]: { ...(prev[proj.id] ?? projectDrafts[proj.id]), desc: e.target.value },
-                                      }))}
-                                    />
-                                  </div>
-
-                                  <div className="grid grid-2 gap-2 margin-top-2">
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
-                                      <label style={{ fontSize: '0.75rem' }}>Goal Amount (UGX)</label>
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={projectDrafts[proj.id]?.goal_amount ?? String(proj.goal_amount)}
-                                        onChange={(e) => setProjectDrafts((prev) => ({
-                                          ...prev,
-                                          [proj.id]: { ...(prev[proj.id] ?? projectDrafts[proj.id]), goal_amount: e.target.value },
-                                        }))}
-                                      />
-                                    </div>
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
-                                      <label style={{ fontSize: '0.75rem' }}>Raised Amount (UGX)</label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={projectDrafts[proj.id]?.raised_amount ?? String(proj.raised_amount)}
-                                        onChange={(e) => setProjectDrafts((prev) => ({
-                                          ...prev,
-                                          [proj.id]: {
-                                            ...(prev[proj.id] ?? projectDrafts[proj.id]),
-                                            raised_amount: e.target.value,
-                                          },
-                                        }))}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-2 gap-2 margin-top-2">
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
-                                      <label style={{ fontSize: '0.75rem' }}>Image URL</label>
-                                      <input
-                                        type="url"
-                                        value={projectDrafts[proj.id]?.image_url ?? proj.image_url}
-                                        onChange={(e) => setProjectDrafts((prev) => ({
-                                          ...prev,
-                                          [proj.id]: { ...(prev[proj.id] ?? projectDrafts[proj.id]), image_url: e.target.value },
-                                        }))}
-                                      />
-                                    </div>
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
-                                      <label style={{ fontSize: '0.75rem' }}>Status</label>
-                                      <select
-                                        value={projectDrafts[proj.id]?.status ?? proj.status}
-                                        onChange={(e) => setProjectDrafts((prev) => ({
-                                          ...prev,
-                                          [proj.id]: {
-                                            ...(prev[proj.id] ?? projectDrafts[proj.id]),
-                                            status: e.target.value,
-                                          },
-                                        }))}
-                                      >
-                                        {['Active', 'Almost Complete', 'Completed', 'Paused'].map((status) => (
-                                          <option key={status} value={status}>{status}</option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  </div>
-
-                                  <div className="form-group" style={{ marginTop: '0.5rem', marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                    <input
-                                      id={`project-published-${proj.id}`}
-                                      type="checkbox"
-                                      checked={projectDrafts[proj.id]?.is_published ?? (proj.is_published !== false)}
-                                      onChange={(e) => setProjectDrafts((prev) => ({
-                                        ...prev,
-                                        [proj.id]: { ...(prev[proj.id] ?? projectDrafts[proj.id]), is_published: e.target.checked },
-                                      }))}
-                                    />
-                                    <label htmlFor={`project-published-${proj.id}`} style={{ margin: 0, fontSize: '0.8rem' }}>Published to viewers</label>
-                                  </div>
-
-                                  {openProjectHistoryId === proj.id && (
-                                    <div className="card margin-top-2" style={{ padding: '0.85rem', background: '#f8fafc' }}>
-                                      <h5 style={{ margin: '0 0 0.5rem' }}>Change History</h5>
-                                      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
-                                        {([
-                                          { value: 'all', label: 'All' },
-                                          { value: 'update', label: 'Updates' },
-                                          { value: 'create', label: 'Creates' },
-                                          { value: 'delete', label: 'Deletes' },
-                                        ] as Array<{ value: ProjectHistoryActionFilter; label: string }>).map((filterOption) => (
-                                          <button
-                                            key={filterOption.value}
-                                            type="button"
-                                            onClick={() => setProjectHistoryFilter(filterOption.value)}
-                                            className="btn btn-small"
-                                            style={{
-                                              padding: '0.22rem 0.6rem',
-                                              border: '1px solid #cbd5e1',
-                                              background: projectHistoryFilter === filterOption.value ? '#e2e8f0' : '#fff',
-                                              color: '#334155'
-                                            }}
-                                          >
-                                            {filterOption.label}
-                                          </button>
-                                        ))}
-                                      </div>
-                                      {allHistoryEntries.length === 0 ? (
-                                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>No history entries yet.</p>
-                                      ) : filteredHistoryEntries.length === 0 ? (
-                                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>No entries match this filter.</p>
-                                      ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                                          {filteredHistoryEntries.map((entry) => {
-                                            const actionStyles = getHistoryActionStyles(entry.action);
-                                            return (
-                                            <div key={entry.id} style={{ padding: '0.55rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff' }}>
-                                              <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', background: actionStyles.background, color: actionStyles.color, fontSize: '0.68rem', letterSpacing: '0.02em' }}>
-                                                  {entry.action.toUpperCase()}
-                                                </span>
-                                                <span>{new Date(entry.created_at).toLocaleString()} · {entry.updated_by_username || 'System'}</span>
-                                              </p>
-                                              <div style={{ marginTop: '0.35rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                                                {Object.entries(entry.changed_fields || {}).map(([field, rawValue], index) => {
-                                                  if (field === 'new' || field === 'old') {
-                                                    const snapshot = rawValue && typeof rawValue === 'object'
-                                                      ? Object.entries(rawValue as Record<string, unknown>)
-                                                      : [];
-                                                    return (
-                                                      <div key={`${entry.id}-${field}-${index}`}>
-                                                        <p style={{ margin: '0 0 0.2rem', fontSize: '0.72rem', fontWeight: 700, color: '#334155' }}>
-                                                          {field === 'new' ? 'Snapshot After Change' : 'Snapshot Before Change'}
-                                                        </p>
-                                                        {snapshot.length === 0 ? (
-                                                          <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>No snapshot details.</p>
-                                                        ) : (
-                                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                                            {snapshot.map(([snapshotField, snapshotValue]) => (
-                                                              <p key={`${entry.id}-${field}-${snapshotField}`} style={{ margin: 0, fontSize: '0.72rem', color: '#475569' }}>
-                                                                <strong>{formatProjectHistoryField(snapshotField)}:</strong> {formatProjectHistoryValue(snapshotValue)}
-                                                              </p>
-                                                            ))}
-                                                          </div>
-                                                        )}
-                                                      </div>
-                                                    );
-                                                  }
-
-                                                  if (rawValue && typeof rawValue === 'object' && ('old' in (rawValue as Record<string, unknown>) || 'new' in (rawValue as Record<string, unknown>))) {
-                                                    const record = rawValue as Record<string, unknown>;
-                                                    return (
-                                                      <div key={`${entry.id}-${field}-${index}`} style={{ padding: '0.3rem 0.45rem', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                                                        <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#334155' }}>{formatProjectHistoryField(field)}</p>
-                                                        <p style={{ margin: '0.15rem 0 0', fontSize: '0.72rem', color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
-                                                          <span style={{ color: '#991b1b', background: '#fee2e2', borderRadius: '4px', padding: '0.05rem 0.28rem' }}>Old: {formatProjectHistoryValue(record.old)}</span>
-                                                          <span style={{ color: '#0f172a' }}>{'->'}</span>
-                                                          <span style={{ color: '#166534', background: '#dcfce7', borderRadius: '4px', padding: '0.05rem 0.28rem' }}>New: {formatProjectHistoryValue(record.new)}</span>
-                                                        </p>
-                                                      </div>
-                                                    );
-                                                  }
-
-                                                  return (
-                                                    <p key={`${entry.id}-${field}-${index}`} style={{ margin: 0, fontSize: '0.72rem', color: '#475569' }}>
-                                                      <strong>{formatProjectHistoryField(field)}:</strong> {formatProjectHistoryValue(rawValue)}
-                                                    </p>
-                                                  );
-                                                })}
-                                              </div>
-                                            </div>
-                                          )})}
-                                        </div>
-                                      )}
-                                    </div>
+                            <div key={proj.id} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                              {/* View Row */}
+                              <div style={{ display: 'flex', gap: '1rem', padding: '1rem 1.25rem', alignItems: 'flex-start' }}>
+                                {/* Thumbnail */}
+                                <div style={{ width: '72px', height: '72px', flexShrink: 0, borderRadius: '8px', overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {proj.image_url ? (
+                                    <img src={proj.image_url} alt={proj.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                                  ) : (
+                                    <span style={{ fontSize: '1.75rem' }}>???</span>
                                   )}
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-                                  <span style={{ padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, background: statusBg, color: statusColor }}>{proj.status}</span>
-                                  <span style={{ padding: '0.22rem 0.65rem', borderRadius: '20px', fontSize: '0.72rem', fontWeight: 700, background: proj.is_published !== false ? '#dcfce7' : '#fee2e2', color: proj.is_published !== false ? '#166534' : '#991b1b' }}>
-                                    {proj.is_published !== false ? 'Published' : 'Hidden'}
-                                  </span>
-                                  <button onClick={() => handleToggleProjectHistory(proj.id)} className="btn btn-small btn-outline">
-                                    {openProjectHistoryId === proj.id ? 'Hide History' : 'View History'}
+
+                                {/* Info */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.3rem' }}>
+                                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', background: '#eff6ff', padding: '0.15rem 0.55rem', borderRadius: '20px' }}>{proj.category}</span>
+                                    <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '20px', background: sc.bg, color: sc.color }}>{proj.status}</span>
+                                    <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '20px', background: proj.is_published !== false ? '#dcfce7' : '#fee2e2', color: proj.is_published !== false ? '#166534' : '#991b1b' }}>
+                                      {proj.is_published !== false ? '? Published' : '? Hidden'}
+                                    </span>
+                                  </div>
+                                  <h4 style={{ margin: '0 0 0.2rem', fontSize: '0.97rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{proj.title}</h4>
+                                  <p style={{ margin: '0 0 0.45rem', fontSize: '0.82rem', color: '#6b7280', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as React.CSSProperties['WebkitBoxOrient'] }}>{proj.desc}</p>
+                                  {/* Progress */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                    <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: pct + '%', background: pct >= 100 ? '#16a34a' : 'var(--primary)', borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                                    </div>
+                                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary)', whiteSpace: 'nowrap' }}>{pct}%</span>
+                                    <span style={{ fontSize: '0.78rem', color: '#6b7280', whiteSpace: 'nowrap' }}>UGX {proj.raised_amount.toLocaleString()} / {proj.goal_amount.toLocaleString()}</span>
+                                  </div>
+                                </div>
+
+                                {/* Action buttons � horizontal row */}
+                                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                  <button
+                                    onClick={() => setProjectEditOpenIds(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(proj.id)) next.delete(proj.id); else next.add(proj.id);
+                                      return next;
+                                    })}
+                                    className="btn btn-small btn-outline"
+                                    style={{ minWidth: '58px' }}
+                                  >
+                                    {isEditOpen ? '? Close' : '?? Edit'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleToggleProjectHistory(proj.id)}
+                                    className="btn btn-small btn-outline"
+                                    style={{ minWidth: '72px' }}
+                                  >
+                                    {isHistoryOpen ? 'Hide Log' : '?? History'}
                                   </button>
                                   <button
                                     onClick={() => handleAdminQuickToggleProjectPublish(proj.id)}
                                     className="btn btn-small btn-outline"
+                                    style={{ minWidth: '80px' }}
                                   >
-                                    {proj.is_published !== false ? 'Hide from Public' : 'Publish Now'}
+                                    {proj.is_published !== false ? '?? Hide' : '?? Publish'}
                                   </button>
-                                  <button onClick={() => handleAdminUpdateProject(proj.id)} className="btn btn-small btn-outline">Update</button>
                                   <button
                                     onClick={() => handleAdminDeleteProject(proj.id)}
                                     className="btn btn-small"
-                                    style={{ background: '#FEE2E2', color: '#DC2626', border: 'none' }}
+                                    style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', minWidth: '58px' }}
                                   >
-                                    Delete
+                                    ?? Delete
                                   </button>
                                 </div>
                               </div>
+
+                              {/* Inline Edit Form */}
+                              {isEditOpen && (
+                                <div style={{ borderTop: '1px solid #e2e8f0', padding: '1rem 1.25rem', background: '#f8fafc' }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label style={{ fontSize: '0.75rem' }}>Title</label>
+                                      <input type="text" value={draft.title} onChange={e => setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, title: e.target.value } }))} />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label style={{ fontSize: '0.75rem' }}>Category</label>
+                                      <select value={draft.category} onChange={e => setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, category: e.target.value } }))}>
+                                        {['Construction', 'Community', 'Outreach', 'Education', 'Media', 'Operations'].map(c => <option key={c} value={c}>{c}</option>)}
+                                      </select>
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label style={{ fontSize: '0.75rem' }}>Goal Amount (UGX)</label>
+                                      <input type="number" min="1" value={draft.goal_amount} onChange={e => setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, goal_amount: e.target.value } }))} />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label style={{ fontSize: '0.75rem' }}>Raised Amount (UGX)</label>
+                                      <input type="number" min="0" value={draft.raised_amount} onChange={e => setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, raised_amount: e.target.value } }))} />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label style={{ fontSize: '0.75rem' }}>Status</label>
+                                      <select value={draft.status} onChange={e => setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, status: e.target.value } }))}>
+                                        {['Active', 'Almost Complete', 'Completed', 'Paused'].map(s => <option key={s} value={s}>{s}</option>)}
+                                      </select>
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                      <label style={{ fontSize: '0.75rem' }}>Image URL</label>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                          <input type="url" value={draft.image_url} onChange={e => setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, image_url: e.target.value } }))} placeholder="Paste URL or upload�" style={{ flex: 1 }} />
+                                          {draft.image_url && (
+                                            <img src={draft.image_url} alt="preview" style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '5px', border: '1px solid #e2e8f0', flexShrink: 0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.opacity = '0.2'; }} />
+                                          )}
+                                        </div>
+                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.78rem', color: '#1e3a8a', fontWeight: 600, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.25rem 0.6rem', width: 'fit-content' }}>
+                                          ?? Choose File
+                                          <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp,image/gif"
+                                            style={{ display: 'none' }}
+                                            onChange={async (e) => {
+                                              const file = e.target.files?.[0];
+                                              if (!file) return;
+                                              try {
+                                                const url = await uploadProjectImage(file);
+                                                setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, image_url: url } }));
+                                                toast.success('Image uploaded.');
+                                              } catch (err: any) {
+                                                toast.error(err.message || 'Upload failed.');
+                                              }
+                                              e.target.value = '';
+                                            }}
+                                          />
+                                        </label>
+                                      </div>
+                                    </div>
+                                    <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                                      <label style={{ fontSize: '0.75rem' }}>Description</label>
+                                      <textarea rows={2} value={draft.desc} onChange={e => setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, desc: e.target.value } }))} />
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', gridColumn: '1 / -1' }}>
+                                      <input
+                                        id={`project-published-${proj.id}`}
+                                        type="checkbox"
+                                        checked={draft.is_published}
+                                        onChange={e => setProjectDrafts(prev => ({ ...prev, [proj.id]: { ...draft, is_published: e.target.checked } }))}
+                                      />
+                                      <label htmlFor={`project-published-${proj.id}`} style={{ margin: 0, fontSize: '0.82rem', fontWeight: 500 }}>Published to viewers</label>
+                                    </div>
+                                  </div>
+                                  <div style={{ marginTop: '0.85rem', display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                      onClick={() => {
+                                        handleAdminUpdateProject(proj.id);
+                                        setProjectEditOpenIds(prev => { const next = new Set(prev); next.delete(proj.id); return next; });
+                                      }}
+                                      className="btn btn-primary btn-small"
+                                    >
+                                      ?? Save Changes
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setProjectDrafts(prev => { const next = { ...prev }; delete next[proj.id]; return next; });
+                                        setProjectEditOpenIds(prev => { const next = new Set(prev); next.delete(proj.id); return next; });
+                                      }}
+                                      className="btn btn-small btn-outline"
+                                    >
+                                      Discard
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Change History Panel */}
+                              {isHistoryOpen && (
+                                <div style={{ borderTop: '1px solid #e2e8f0', padding: '0.85rem 1.25rem', background: '#f8fafc' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                                    <h5 style={{ margin: 0, fontSize: '0.88rem' }}>Change History</h5>
+                                    <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                      {([
+                                        { value: 'all', label: 'All' },
+                                        { value: 'update', label: 'Updates' },
+                                        { value: 'create', label: 'Creates' },
+                                        { value: 'delete', label: 'Deletes' },
+                                      ] as Array<{ value: ProjectHistoryActionFilter; label: string }>).map(fo => (
+                                        <button
+                                          key={fo.value}
+                                          type="button"
+                                          onClick={() => setProjectHistoryFilter(fo.value)}
+                                          className="btn btn-small"
+                                          style={{ padding: '0.2rem 0.55rem', border: '1px solid #cbd5e1', background: projectHistoryFilter === fo.value ? '#e2e8f0' : '#fff', color: '#334155' }}
+                                        >
+                                          {fo.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  {allHistoryEntries.length === 0 ? (
+                                    <p style={{ margin: 0, color: '#6b7280', fontSize: '0.82rem' }}>No history entries yet.</p>
+                                  ) : filteredHistoryEntries.length === 0 ? (
+                                    <p style={{ margin: 0, color: '#6b7280', fontSize: '0.82rem' }}>No entries match this filter.</p>
+                                  ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                      {filteredHistoryEntries.map((entry) => {
+                                        const actionStyles = getHistoryActionStyles(entry.action);
+                                        return (
+                                          <div key={entry.id} style={{ padding: '0.55rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                                            <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                              <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', background: actionStyles.background, color: actionStyles.color, fontSize: '0.68rem', letterSpacing: '0.02em' }}>
+                                                {entry.action.toUpperCase()}
+                                              </span>
+                                              <span>{new Date(entry.created_at).toLocaleString()} � {entry.updated_by_username || 'System'}</span>
+                                            </p>
+                                            <div style={{ marginTop: '0.35rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                              {Object.entries(entry.changed_fields || {}).map(([field, rawValue], index) => {
+                                                if (field === 'new' || field === 'old') {
+                                                  const snapshot = rawValue && typeof rawValue === 'object' ? Object.entries(rawValue as Record<string, unknown>) : [];
+                                                  return (
+                                                    <div key={`${entry.id}-${field}-${index}`}>
+                                                      <p style={{ margin: '0 0 0.2rem', fontSize: '0.72rem', fontWeight: 700, color: '#334155' }}>
+                                                        {field === 'new' ? 'Snapshot After Change' : 'Snapshot Before Change'}
+                                                      </p>
+                                                      {snapshot.length === 0 ? (
+                                                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>No snapshot details.</p>
+                                                      ) : (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                                          {snapshot.map(([sf, sv]) => (
+                                                            <p key={`${entry.id}-${field}-${sf}`} style={{ margin: 0, fontSize: '0.72rem', color: '#475569' }}>
+                                                              <strong>{formatProjectHistoryField(sf)}:</strong> {formatProjectHistoryValue(sv)}
+                                                            </p>
+                                                          ))}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                }
+                                                if (rawValue && typeof rawValue === 'object' && ('old' in (rawValue as Record<string, unknown>) || 'new' in (rawValue as Record<string, unknown>))) {
+                                                  const record = rawValue as Record<string, unknown>;
+                                                  return (
+                                                    <div key={`${entry.id}-${field}-${index}`} style={{ padding: '0.3rem 0.45rem', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                                      <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#334155' }}>{formatProjectHistoryField(field)}</p>
+                                                      <p style={{ margin: '0.15rem 0 0', fontSize: '0.72rem', color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
+                                                        <span style={{ color: '#991b1b', background: '#fee2e2', borderRadius: '4px', padding: '0.05rem 0.28rem' }}>Old: {formatProjectHistoryValue(record.old)}</span>
+                                                        <span style={{ color: '#0f172a' }}>?</span>
+                                                        <span style={{ color: '#166534', background: '#dcfce7', borderRadius: '4px', padding: '0.05rem 0.28rem' }}>New: {formatProjectHistoryValue(record.new)}</span>
+                                                      </p>
+                                                    </div>
+                                                  );
+                                                }
+                                                return (
+                                                  <p key={`${entry.id}-${field}-${index}`} style={{ margin: 0, fontSize: '0.72rem', color: '#475569' }}>
+                                                    <strong>{formatProjectHistoryField(field)}:</strong> {formatProjectHistoryValue(rawValue)}
+                                                  </p>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
                       </div>
+                      )}
                     </div>
-                  )}
+                  );
+                })()}
 
                   {/* Dashboard Stats */}
                   {activeAdminTab === 'admin-stats' && (
                     <div className="admin-tab-content active">
-                      <h2>Key Statistics</h2>
-                      <div className="grid grid-3 gap-2 margin-top-2">
-                        <div className="stat-card">
-                          <span className="stat-num">{prayers.length}</span>
-                          <span className="stat-label">Prayer Requests</span>
+                      {/* Welcome banner */}
+                      <div style={{
+                        background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 80%, #1d4ed8 100%)',
+                        borderRadius: '12px',
+                        padding: '1.5rem 1.75rem',
+                        marginBottom: '1.75rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                      }}>
+                        <div>
+                          <div style={{ color: 'rgba(212,175,55,0.9)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.3rem' }}>
+                            Welcome back
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '1.4rem', fontWeight: 700, fontFamily: 'var(--font-serif)' }}>
+                            {localStorage.getItem('admin_username') || 'Administrator'}
+                          </div>
+                          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.82rem', marginTop: '0.25rem' }}>
+                            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                          </div>
                         </div>
-                        <div className="stat-card">
-                          <span className="stat-num">{bibleStudies.length}</span>
-                          <span className="stat-label">Bible Study Signups</span>
-                        </div>
-                        <div className="stat-card">
-                          <span className="stat-num">{totalDonations.toLocaleString()} UGX</span>
-                          <span className="stat-label">Total Donations</span>
-                        </div>
+                        <svg width="64" height="64" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.35, flexShrink: 0 }}>
+                          <circle cx="85" cy="85" r="85" fill="white" />
+                          <g transform="translate(17,17) scale(0.8)"><g transform="translate(-20.5,-20.6)" fill="#D4AF37">
+                            <path d="m 128.7,161.7 c -11.5,-1.9 -17.7,3.5 -19.6,8.6 -0.2,0.5 -0.7,0.4 -0.7,0 v -1.6 c 0,-5.7 5.1,-10.9 11.1,-17 l 10,-10 26.6,4.6 c 0,0 7.6,7.6 14.1,14.1 12.5,-14.8 20.1,-34 20.1,-54.9 0,-46.9 -38,-84.9 -84.9,-84.9 -46.9,0 -84.9,38 -84.9,84.9 0,20.9 7.6,40.1 20.1,54.9 6.5,-6.5 14.1,-14.1 14.1,-14.1 l 30.2,-5.2 c 14,-2.4 17.5,0.7 17.5,5.4 0,0.2 -0.2,0.4 -0.4,0.4 h -8.5 c -0.2,0 -0.2,0.2 -0.2,0.4 v 5.2 c 0,0.2 -0.2,0.2 0,0.2 h 8.7 c 0.2,0 0.4,0.2 0.4,0.4 0,0 0,16.9 0,17.3 0,0.4 -0.5,0.5 -0.7,0.1 -1.9,-5.1 -8.1,-10.5 -19.6,-8.6 0,0 -19.9,3.4 -34.7,6 15.2,14.1 35.5,22.8 57.9,22.8 22.4,0 42.7,-8.6 57.9,-22.8 -14.6,-2.8 -34.5,-6.2 -34.5,-6.2 z" />
+                          </g></g>
+                        </svg>
                       </div>
-                      <h3 className="margin-top-3">Recent Activity Logs</h3>
-                      <div className="activity-log-table margin-top-1">
+
+                      {/* Stats grid */}
+                      <h3 style={{ marginBottom: '0.85rem', color: '#1e3a8a', fontWeight: 700 }}>Ministry Overview</h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.85rem', marginBottom: '1.75rem' }}>
+                        {[
+                          { label: 'Prayer Requests', value: prayers.length, icon: '??', color: '#7c3aed', bg: '#f5f3ff' },
+                          { label: 'Bible Studies', value: bibleStudies.length, icon: '??', color: '#059669', bg: '#ecfdf5' },
+                          { label: 'Events', value: events.length, icon: '??', color: '#0891b2', bg: '#ecfeff' },
+                          { label: 'Sermons', value: sermons.length, icon: '???', color: '#1e3a8a', bg: '#eff6ff' },
+                          { label: 'Testimonies', value: testimonies.length, icon: '?', color: '#d97706', bg: '#fffbeb' },
+                          { label: 'Blog Posts', value: blogPosts.length, icon: '??', color: '#dc2626', bg: '#fef2f2' },
+                          { label: 'Announcements', value: announcements.length, icon: '??', color: '#0f766e', bg: '#f0fdfa' },
+                          { label: 'Total Donations', value: `${totalDonations.toLocaleString()} UGX`, icon: '??', color: '#b45309', bg: '#fefce8' },
+                        ].map(({ label, value, icon, color, bg }) => (
+                          <div key={label} style={{
+                            background: bg,
+                            borderRadius: '12px',
+                            padding: '1rem 1.1rem',
+                            border: `1px solid ${color}20`,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.35rem',
+                          }}>
+                            <div style={{ fontSize: '1.35rem' }}>{icon}</div>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
+                            <div style={{ fontSize: '0.76rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Quick actions */}
+                      <h3 style={{ marginBottom: '0.85rem', color: '#1e3a8a', fontWeight: 700 }}>Quick Actions</h3>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginBottom: '1.75rem' }}>
+                        {[
+                          { label: '+ New Announcement', tab: 'admin-announcements' as AdminTabId, color: '#0f766e' },
+                          { label: '+ New Event', tab: 'admin-events' as AdminTabId, color: '#0891b2' },
+                          { label: '+ New Blog Post', tab: 'admin-blog' as AdminTabId, color: '#7c3aed' },
+                          { label: '+ New Sermon', tab: 'admin-sermons' as AdminTabId, color: '#1e3a8a' },
+                          { label: '?? Manage Accounts', tab: 'admin-accounts' as AdminTabId, color: '#d97706' },
+                          { label: '🧾 Audit Trail', tab: 'admin-audit' as AdminTabId, color: '#6b7280' },
+                        ].filter(a => visibleAdminTabs.some(t => t.id === a.tab)).map(({ label, tab, color }) => (
+                          <button
+                            key={tab}
+                            onClick={() => setActiveAdminTab(tab)}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              borderRadius: '8px',
+                              border: `1px solid ${color}40`,
+                              background: `${color}10`,
+                              color,
+                              fontWeight: 600,
+                              fontSize: '0.84rem',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Activity log */}
+                      <h3 style={{ marginBottom: '0.65rem', color: '#1e3a8a', fontWeight: 700 }}>Recent Activity</h3>
+                      <div className="activity-log-table">
                         {logs.map((log, i) => (
                           <div key={i} className="activity-item">
                             <span className="activity-time">[{log.time}]</span>
@@ -7550,27 +8526,82 @@ export default function App({ entryMode }: AppProps = {}) {
                   )}
 
                   {/* Bible Studies List */}
-                  {activeAdminTab === 'admin-studies' && (
+                  {activeAdminTab === 'admin-studies' && (() => {
+                    const filtered = bibleStudies.filter(s => {
+                      const q = bibleStudySearch.toLowerCase();
+                      if (!q) return true;
+                      return s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q) || s.country.toLowerCase().includes(q) || s.course.toLowerCase().includes(q);
+                    });
+                    const total = bibleStudies.length;
+                    const individual = bibleStudies.filter(s => s.registration_type !== 'small_group').length;
+                    const smallGroup = bibleStudies.filter(s => s.registration_type === 'small_group').length;
+                    return (
                     <div className="admin-tab-content active">
-                      <h2>Bible Study Registration List</h2>
-                      <div className="table-responsive margin-top-2">
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Bible Study Registrations</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>All participants who registered for Bible study courses.</p>
+                        </div>
+                        <button onClick={fetchBibleStudies} className="btn btn-outline btn-small">? Refresh</button>
+                      </div>
+
+                      {/* Stats row */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total Signups', value: total, color: '#1e3a8a', bg: '#eff6ff' },
+                          { label: 'Individual', value: individual, color: '#059669', bg: '#ecfdf5' },
+                          { label: 'Small Groups', value: smallGroup, color: '#7c3aed', bg: '#f5f3ff' },
+                        ].map(({ label, value, color, bg }) => (
+                          <div key={label} style={{ padding: '0.75rem 1.25rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, minWidth: '120px' }}>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Search */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', alignItems: 'center' }}>
+                        <div style={{ position: 'relative', flex: 1, maxWidth: '360px' }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)' }}>
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Search by name, email, country, topic�"
+                            value={bibleStudySearch}
+                            onChange={e => setBibleStudySearch(e.target.value)}
+                            style={{ width: '100%', paddingLeft: '2.25rem', paddingRight: '0.75rem', height: '36px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.88rem' }}
+                          />
+                        </div>
+                        <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+                      </div>
+
+                      {/* Table */}
+                      <div className="table-responsive">
                         <table className="admin-table">
                           <thead>
                             <tr>
+                              <th>#</th>
                               <th>Name</th>
-                              <th>Email / Phone</th>
+                              <th>Contact</th>
                               <th>Country</th>
-                              <th>Topic</th>
+                              <th>Course / Topic</th>
+                              <th>Type</th>
+                              <th>Status</th>
                               <th>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {bibleStudies.length === 0 ? (
-                              <tr><td colSpan={5} className="text-center">No registrations yet.</td></tr>
+                            {filtered.length === 0 ? (
+                              <tr><td colSpan={8} className="text-center" style={{ padding: '2rem', color: '#9ca3af' }}>
+                                {bibleStudies.length === 0 ? 'No registrations yet.' : 'No results for that search.'}
+                              </td></tr>
                             ) : (
-                              bibleStudies.map(item => (
+                              filtered.map((item, idx) => (
                                 editingStudyId === item.id ? (
                                   <tr key={item.id}>
+                                    <td>{idx + 1}</td>
                                     <td><input value={studyDrafts[item.id!]?.name ?? item.name} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), name: e.target.value } }))} /></td>
                                     <td>
                                       <input value={studyDrafts[item.id!]?.email ?? item.email} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), email: e.target.value } }))} placeholder="Email" />
@@ -7578,6 +8609,8 @@ export default function App({ entryMode }: AppProps = {}) {
                                     </td>
                                     <td><input value={studyDrafts[item.id!]?.country ?? item.country} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), country: e.target.value } }))} /></td>
                                     <td><input value={studyDrafts[item.id!]?.course ?? item.course} onChange={(e) => setStudyDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), course: e.target.value } }))} /></td>
+                                    <td>�</td>
+                                    <td>�</td>
                                     <td>
                                       <button onClick={() => handleAdminUpdateStudy(item.id!)} className="btn btn-small btn-accent">Save</button>
                                       <button onClick={() => setEditingStudyId(null)} className="btn btn-small btn-outline">Cancel</button>
@@ -7585,25 +8618,34 @@ export default function App({ entryMode }: AppProps = {}) {
                                   </tr>
                                 ) : (
                                   <tr key={item.id}>
+                                    <td style={{ color: '#9ca3af', fontSize: '0.82rem' }}>{idx + 1}</td>
                                     <td><strong>{item.name}</strong></td>
-                                    <td>{item.email}<br />{item.phone}</td>
+                                    <td style={{ fontSize: '0.84rem' }}>
+                                      <div>{item.email}</div>
+                                      <div style={{ color: '#9ca3af' }}>{item.phone}</div>
+                                    </td>
                                     <td>{item.country}</td>
+                                    <td><span className="badge">{item.course}</span></td>
                                     <td>
-                                      <span className="badge">{item.course}</span>
-                                      <div style={{ marginTop: '0.35rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                        <span className="badge" style={{ backgroundColor: item.registration_type === 'small_group' ? '#ede9fe' : '#e0f2fe', color: item.registration_type === 'small_group' ? '#5b21b6' : '#075985' }}>
-                                          {item.registration_type === 'small_group' ? 'Small Group' : 'Individual'}
-                                        </span>
-                                        {item.preferred_meeting_day && (
-                                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                            {item.preferred_meeting_day}{item.preferred_meeting_time ? ` · ${item.preferred_meeting_time}` : ''}
-                                          </span>
-                                        )}
-                                      </div>
+                                      <span style={{
+                                        padding: '0.2rem 0.55rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600,
+                                        background: item.registration_type === 'small_group' ? '#f5f3ff' : '#ecfdf5',
+                                        color: item.registration_type === 'small_group' ? '#7c3aed' : '#059669',
+                                      }}>
+                                        {item.registration_type === 'small_group' ? '?? Group' : '?? Individual'}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <span style={{
+                                        padding: '0.2rem 0.55rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600,
+                                        background: '#eff6ff', color: '#1e3a8a',
+                                      }}>
+                                        {item.status || 'Active'}
+                                      </span>
                                     </td>
                                     <td>
                                       <button onClick={() => item.id && handleEditBibleStudy(item)} className="btn btn-small btn-outline">Edit</button>
-                                      <button onClick={() => item.id && handleAdminDeleteStudy(item.id)} className="btn btn-small btn-outline">Delete</button>
+                                      <button onClick={() => item.id && handleAdminDeleteStudy(item.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626' }}>Delete</button>
                                     </td>
                                   </tr>
                                 )
@@ -7612,163 +8654,527 @@ export default function App({ entryMode }: AppProps = {}) {
                           </tbody>
                         </table>
                       </div>
-                    </div>
-                  )}
+                      {/* -- Discussion Groups Section -- */}
+                      <div style={{ marginTop: '2rem', borderTop: '2px solid #e5e7eb', paddingTop: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                          <div>
+                            <h3 style={{ marginBottom: '0.15rem', color: '#1e3a8a' }}>?? Bible Discussion Groups</h3>
+                            <p className="text-muted" style={{ margin: 0, fontSize: '0.84rem' }}>Create and manage study groups. Assign registered participants to groups.</p>
+                          </div>
+                          <button
+                            onClick={() => { setShowGroupForm(v => !v); setEditingGroupId(null); setGroupForm({ name: '', topic: '', meeting_day: '', meeting_time: '', format: '', leader_name: '', description: '', max_members: null, is_active: true }); }}
+                            className="btn btn-primary btn-small"
+                          >
+                            {showGroupForm ? '? Cancel' : '+ New Group'}
+                          </button>
+                        </div>
 
-                  {/* Prayers List */}
-                  {activeAdminTab === 'admin-prayers' && (
-                    <div className="admin-tab-content active">
-                      <h2>🙏 Prayer Requests Chamber Log</h2>
-                      
-                      {/* Stats Cards */}
-                      <div className="grid grid-4 gap-2 margin-top-2" style={{ marginBottom: '2rem' }}>
-                        <div className="card" style={{ padding: '1rem', textAlign: 'center', backgroundColor: 'rgba(33, 150, 243, 0.05)', border: '1px solid rgba(33, 150, 243, 0.2)' }}>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--primary)' }}>{prayers.length}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Total Requests</div>
-                        </div>
-                        <div className="card" style={{ padding: '1rem', textAlign: 'center', backgroundColor: 'rgba(212, 175, 55, 0.05)', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--accent)' }}>{prayers.filter(p => !p.confidential).length}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Public Requests</div>
-                        </div>
-                        <div className="card" style={{ padding: '1rem', textAlign: 'center', backgroundColor: 'rgba(211, 47, 47, 0.05)', border: '1px solid rgba(211, 47, 47, 0.2)' }}>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#d32f2f' }}>{prayers.filter(p => p.confidential).length}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Confidential</div>
-                        </div>
-                        <div className="card" style={{ padding: '1rem', textAlign: 'center', backgroundColor: 'rgba(76, 175, 80, 0.05)', border: '1px solid rgba(76, 175, 80, 0.2)' }}>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#4CAF50' }}>{prayers.filter(p => p.follow_up_status === 'completed').length}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Completed</div>
-                        </div>
-                      </div>
+                        {/* Create / Edit form */}
+                        {showGroupForm && (
+                          <form onSubmit={handleSaveGroup} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                            <h4 style={{ marginBottom: '1rem', color: '#1e3a8a' }}>{editingGroupId ? 'Edit Group' : 'Create New Discussion Group'}</h4>
+                            <div className="grid grid-2 gap-2">
+                              <div className="form-group">
+                                <label>Group Name *</label>
+                                <input type="text" value={groupForm.name} onChange={e => setGroupForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Morning Glory Group" required />
+                              </div>
+                              <div className="form-group">
+                                <label>Study Topic</label>
+                                <input type="text" value={groupForm.topic} onChange={e => setGroupForm(p => ({ ...p, topic: e.target.value }))} placeholder="e.g. The Book of Daniel" />
+                              </div>
+                              <div className="form-group">
+                                <label>Meeting Day</label>
+                                <select value={groupForm.meeting_day} onChange={e => setGroupForm(p => ({ ...p, meeting_day: e.target.value }))}>
+                                  <option value="">� Select day �</option>
+                                  {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                              </div>
+                              <div className="form-group">
+                                <label>Meeting Time</label>
+                                <input type="text" value={groupForm.meeting_time} onChange={e => setGroupForm(p => ({ ...p, meeting_time: e.target.value }))} placeholder="e.g. 6:00 PM" />
+                              </div>
+                              <div className="form-group">
+                                <label>Format</label>
+                                <select value={groupForm.format} onChange={e => setGroupForm(p => ({ ...p, format: e.target.value as BibleDiscussionGroup['format'] }))}>
+                                  <option value="">� Select format �</option>
+                                  <option value="in_person">In Person</option>
+                                  <option value="online">Online</option>
+                                  <option value="hybrid">Hybrid</option>
+                                </select>
+                              </div>
+                              <div className="form-group">
+                                <label>Group Leader</label>
+                                <input type="text" value={groupForm.leader_name} onChange={e => setGroupForm(p => ({ ...p, leader_name: e.target.value }))} placeholder="e.g. Elder Samuel" />
+                              </div>
+                              <div className="form-group">
+                                <label>Max Members</label>
+                                <input type="number" value={groupForm.max_members ?? ''} onChange={e => setGroupForm(p => ({ ...p, max_members: e.target.value ? Number(e.target.value) : null }))} placeholder="Leave blank for unlimited" min={1} />
+                              </div>
+                              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingTop: '1.5rem' }}>
+                                <input type="checkbox" id="grp-active" checked={groupForm.is_active} onChange={e => setGroupForm(p => ({ ...p, is_active: e.target.checked }))} />
+                                <label htmlFor="grp-active" style={{ margin: 0, fontWeight: 500 }}>Group is active</label>
+                              </div>
+                              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                <label>Description / Notes</label>
+                                <textarea rows={2} value={groupForm.description} onChange={e => setGroupForm(p => ({ ...p, description: e.target.value }))} placeholder="Optional notes about this group�" />
+                              </div>
+                            </div>
+                            <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>
+                              {editingGroupId ? 'Save Changes' : 'Create Group'}
+                            </button>
+                          </form>
+                        )}
 
-                      {/* Prayer Status Legend */}
-                      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.9rem' }}>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#2196F3', borderRadius: '2px', marginRight: '0.5rem' }}></span>Received</div>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#FF9800', borderRadius: '2px', marginRight: '0.5rem' }}></span>Assigned</div>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#9C27B0', borderRadius: '2px', marginRight: '0.5rem' }}></span>Contacted</div>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#F44336', borderRadius: '2px', marginRight: '0.5rem' }}></span>Ongoing</div>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#4CAF50', borderRadius: '2px', marginRight: '0.5rem' }}></span>Completed</div>
-                      </div>
+                        {groupsError && <div className="alert-danger" style={{ marginBottom: '0.75rem', fontSize: '0.88rem' }}>{groupsError}</div>}
 
-                      <div className="table-responsive">
-                        <table className="admin-table">
-                          <thead>
-                            <tr>
-                              <th>Name</th>
-                              <th>Request Preview</th>
-                              <th>Care Type</th>
-                              <th>Status</th>
-                              <th>Privacy</th>
-                              <th>Follow-up Notes</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {prayers.length === 0 ? (
-                              <tr><td colSpan={7} className="text-center">No prayer requests submitted yet.</td></tr>
-                            ) : (
-                              prayers.map(item => (
-                                editingPrayerId === item.id ? (
-                                  <tr key={item.id} style={{ backgroundColor: 'rgba(33, 150, 243, 0.05)' }}>
-                                    <td style={{ width: '120px' }}>
-                                      <input value={prayerDrafts[item.id!]?.name ?? item.name} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), name: e.target.value } }))} placeholder="Name" />
-                                    </td>
-                                    <td style={{ width: '180px' }}>
-                                      <textarea value={prayerDrafts[item.id!]?.content ?? item.content} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), content: e.target.value } }))} rows={2} style={{ fontSize: '0.85rem' }} />
-                                    </td>
-                                    <td style={{ width: '110px' }}>
-                                      <select value={prayerDrafts[item.id!]?.care_request_type ?? item.care_request_type ?? 'none'} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), care_request_type: e.target.value as any } }))}>
-                                        <option value="none">None</option>
-                                        <option value="pastoral_call">Pastoral Call</option>
-                                        <option value="elder_visit">Elder Visit</option>
-                                        <option value="counseling">Counseling</option>
-                                        <option value="prayer_partner">Prayer Partner</option>
-                                      </select>
-                                    </td>
-                                    <td style={{ width: '110px' }}>
-                                      <select value={prayerDrafts[item.id!]?.follow_up_status ?? item.follow_up_status ?? 'received'} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), follow_up_status: e.target.value as any } }))}>
-                                        <option value="received">Received</option>
-                                        <option value="assigned">Assigned</option>
-                                        <option value="contacted">Contacted</option>
-                                        <option value="ongoing">Ongoing</option>
-                                        <option value="completed">Completed</option>
-                                      </select>
-                                    </td>
-                                    <td style={{ width: '100px' }}>
-                                      <select value={(prayerDrafts[item.id!]?.confidential ?? item.confidential) ? 'true' : 'false'} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), confidential: e.target.value === 'true' } }))}>
-                                        <option value="false">PUBLIC</option>
-                                        <option value="true">CONFIDENTIAL</option>
-                                      </select>
-                                    </td>
-                                    <td style={{ width: '150px' }}>
-                                      <textarea value={prayerDrafts[item.id!]?.follow_up_notes ?? item.follow_up_notes ?? ''} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), follow_up_notes: e.target.value } }))} rows={2} placeholder="Pastoral notes..." style={{ fontSize: '0.85rem' }} />
-                                    </td>
-                                    <td style={{ width: '100px' }}>
-                                      <button onClick={() => handleAdminUpdatePrayer(item.id!)} className="btn btn-small btn-accent">Save</button>
-                                      <button onClick={() => setEditingPrayerId(null)} className="btn btn-small btn-outline" style={{ marginTop: '0.5rem' }}>Cancel</button>
-                                    </td>
-                                  </tr>
-                                ) : (
-                                  <tr key={item.id}>
-                                    <td><strong>{item.name || '(Anonymous)'}</strong></td>
-                                    <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{item.content.substring(0, 50)}...</td>
-                                    <td>
-                                      {item.care_request_type && item.care_request_type !== 'none' ? (
-                                        <span style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: 'rgba(33, 150, 243, 0.15)', color: 'var(--primary)', borderRadius: '4px', fontSize: '0.85rem' }}>
-                                          {item.care_request_type === 'pastoral_call' ? '📞 Pastoral Call' : item.care_request_type === 'elder_visit' ? '👥 Elder Visit' : item.care_request_type === 'counseling' ? '💬 Counseling' : '🤝 Prayer Partner'}
-                                        </span>
-                                      ) : (
-                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>—</span>
-                                      )}
-                                    </td>
-                                    <td>
-                                      <span style={{ display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '500',
-                                        backgroundColor: item.follow_up_status === 'received' ? 'rgba(33, 150, 243, 0.15)' : item.follow_up_status === 'assigned' ? 'rgba(255, 152, 0, 0.15)' : item.follow_up_status === 'contacted' ? 'rgba(156, 39, 176, 0.15)' : item.follow_up_status === 'ongoing' ? 'rgba(244, 67, 54, 0.15)' : 'rgba(76, 175, 80, 0.15)',
-                                        color: item.follow_up_status === 'received' ? '#2196F3' : item.follow_up_status === 'assigned' ? '#FF9800' : item.follow_up_status === 'contacted' ? '#9C27B0' : item.follow_up_status === 'ongoing' ? '#F44336' : '#4CAF50'
-                                      }}>
-                                        {item.follow_up_status === 'received' ? '🔵 Received' : item.follow_up_status === 'assigned' ? '🟠 Assigned' : item.follow_up_status === 'contacted' ? '🟣 Contacted' : item.follow_up_status === 'ongoing' ? '🔴 Ongoing' : '✅ Completed'}
+                        {groupsLoading ? (
+                          <p className="text-muted">Loading groups�</p>
+                        ) : discussionGroups.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>??</div>
+                            <div style={{ fontWeight: 600 }}>No discussion groups yet</div>
+                            <div style={{ fontSize: '0.84rem', marginTop: '0.25rem' }}>Click "+ New Group" to create the first one.</div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {discussionGroups.map(group => (
+                              <div key={group.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                                {/* Group header row */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1rem', background: group.is_active ? '#fff' : '#f9fafb', gap: '0.75rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>??</div>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontWeight: 700, color: '#111827', fontSize: '0.95rem' }}>{group.name}</div>
+                                      <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '0.1rem' }}>
+                                        {[group.topic, group.meeting_day && `${group.meeting_day} ${group.meeting_time}`.trim(), group.leader_name && `Leader: ${group.leader_name}`].filter(Boolean).join(' � ')}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                                    {group.format && (
+                                      <span style={{ padding: '0.2rem 0.55rem', borderRadius: '20px', fontSize: '0.73rem', fontWeight: 600, background: '#eff6ff', color: '#1e3a8a' }}>
+                                        {group.format === 'in_person' ? '?? In Person' : group.format === 'online' ? '?? Online' : '?? Hybrid'}
                                       </span>
-                                    </td>
-                                    <td>{item.confidential ? <span className="badge badge-accent">🔐 CONFIDENTIAL</span> : <span className="badge">🔓 PUBLIC</span>}</td>
-                                    <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{item.follow_up_notes || '—'}</td>
-                                    <td>
-                                      <button onClick={() => item.id && handleEditPrayer(item)} className="btn btn-small btn-outline">Edit</button>
-                                      <button onClick={() => item.id && handleAdminDeletePrayer(item.id)} className="btn btn-small btn-outline" style={{ marginTop: '0.5rem' }}>Delete</button>
-                                    </td>
-                                  </tr>
-                                )
-                              ))
-                            )}
-                          </tbody>
-                        </table>
+                                    )}
+                                    <span style={{ padding: '0.2rem 0.55rem', borderRadius: '20px', fontSize: '0.73rem', fontWeight: 600, background: group.is_active ? '#ecfdf5' : '#f3f4f6', color: group.is_active ? '#059669' : '#9ca3af' }}>
+                                      {group.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                    <span style={{ padding: '0.2rem 0.55rem', borderRadius: '20px', fontSize: '0.73rem', fontWeight: 600, background: '#f5f3ff', color: '#7c3aed' }}>
+                                      ?? {group.member_count ?? 0}{group.max_members ? `/${group.max_members}` : ''}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        const id = group.id!;
+                                        if (expandedGroupId === id) { setExpandedGroupId(null); } else {
+                                          setExpandedGroupId(id);
+                                          fetchGroupMembers(id, group.name);
+                                        }
+                                      }}
+                                      className="btn btn-small btn-outline"
+                                    >
+                                      {expandedGroupId === group.id ? 'Hide' : 'Members'}
+                                    </button>
+                                    <button onClick={() => { setEditingGroupId(group.id!); setGroupForm({ name: group.name, topic: group.topic, meeting_day: group.meeting_day, meeting_time: group.meeting_time, format: group.format as BibleDiscussionGroup['format'], leader_name: group.leader_name, description: group.description, max_members: group.max_members, is_active: group.is_active }); setShowGroupForm(true); }} className="btn btn-small btn-outline">Edit</button>
+                                    <button onClick={() => handleDeleteGroup(group.id!)} className="btn btn-small btn-outline" style={{ color: '#dc2626' }}>Delete</button>
+                                  </div>
+                                </div>
+
+                                {/* Expanded members panel */}
+                                {expandedGroupId === group.id && (
+                                  <div style={{ borderTop: '1px solid #e5e7eb', padding: '0.85rem 1rem', background: '#f8fafc' }}>
+                                    <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#374151', marginBottom: '0.65rem' }}>Group Members</div>
+                                    {(groupMembers[group.id!] ?? []).length === 0 ? (
+                                      <p style={{ color: '#9ca3af', fontSize: '0.84rem', margin: 0 }}>No members assigned yet.</p>
+                                    ) : (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                        {(groupMembers[group.id!] ?? []).map(m => (
+                                          <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.4rem 0.65rem', background: '#fff', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '0.85rem' }}>
+                                            <div>
+                                              <strong>{m.name}</strong>
+                                              <span style={{ color: '#9ca3af', marginLeft: '0.5rem' }}>{m.email} � {m.country}</span>
+                                            </div>
+                                            <button onClick={() => handleRemoveMemberFromGroup(group.id!, m.id!)} className="btn btn-small btn-outline" style={{ color: '#dc2626', padding: '0.15rem 0.5rem', fontSize: '0.75rem' }}>Remove</button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Assign unassigned members */}
+                                    {bibleStudies.filter(s => !s.group_name).length > 0 && (
+                                      <div style={{ marginTop: '0.85rem' }}>
+                                        <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#374151', marginBottom: '0.4rem' }}>Assign a participant</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                          {bibleStudies.filter(s => !s.group_name).map(s => (
+                                            <button key={s.id} onClick={() => handleAssignMemberToGroup(group.id!, s.id!)} style={{ padding: '0.3rem 0.65rem', borderRadius: '20px', border: '1px dashed #1e3a8a', background: '#eff6ff', color: '#1e3a8a', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 500 }}>
+                                              + {s.name}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
 
-                  {/* Donations list */}
-                  {activeAdminTab === 'admin-donations' && (
+                  {/* Prayers Panel */}
+                  {activeAdminTab === 'admin-prayers' && (() => {
+                    const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
+                      received:  { label: 'Received',        color: '#6b7280', bg: '#f3f4f6' },
+                      assigned:  { label: 'Assigned',        color: '#0891b2', bg: '#ecfeff' },
+                      contacted: { label: 'Contacted',       color: '#7c3aed', bg: '#f5f3ff' },
+                      ongoing:   { label: 'Ongoing Support', color: '#d97706', bg: '#fffbeb' },
+                      completed: { label: 'Completed',       color: '#059669', bg: '#ecfdf5' },
+                    };
+                    const CARE_META: Record<string, string> = {
+                      none: '�', pastoral_call: '?? Pastoral Call',
+                      elder_visit: '?? Elder Visit', counseling: '?? Counseling',
+                      prayer_partner: '?? Prayer Partner',
+                    };
+                    const filtered = prayers.filter(p => {
+                      const q = prayerSearch.toLowerCase();
+                      const matchesQ = !q || p.name.toLowerCase().includes(q) || p.content.toLowerCase().includes(q);
+                      const matchesStatus = prayerStatusFilter === 'all' || p.follow_up_status === prayerStatusFilter;
+                      return matchesQ && matchesStatus;
+                    });
+                    const needsFollowUp = prayers.filter(p => p.follow_up_status && !['completed'].includes(p.follow_up_status)).length;
+                    const confidentialCount = prayers.filter(p => p.confidential).length;
+
+                    return (
                     <div className="admin-tab-content active">
-                      <h2>Donation Records</h2>
-                      <div className="table-responsive margin-top-2">
-                        <table className="admin-table">
-                          <thead>
-                            <tr>
-                              <th>Amount</th>
-                              <th>Fund</th>
-                              <th>Method</th>
-                              <th>Status</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {donations.length === 0 ? (
-                              <tr><td colSpan={5} className="text-center">No contributions logged.</td></tr>
-                            ) : (
-                              donations.map(item => (
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Prayer Requests</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Manage and follow up on prayer requests from the congregation.</p>
+                        </div>
+                        <button onClick={fetchPrayers} className="btn btn-outline btn-small">? Refresh</button>
+                      </div>
+
+                      {/* Stat cards */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total Requests', value: prayers.length, color: '#1e3a8a', bg: '#eff6ff' },
+                          { label: 'Needs Follow-up', value: needsFollowUp, color: '#d97706', bg: '#fffbeb' },
+                          { label: 'Confidential', value: confidentialCount, color: '#7c3aed', bg: '#f5f3ff' },
+                          { label: 'Completed', value: prayers.filter(p => p.follow_up_status === 'completed').length, color: '#059669', bg: '#ecfdf5' },
+                        ].map(({ label, value, color, bg }) => (
+                          <div key={label} style={{ padding: '0.75rem 1.25rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, minWidth: '120px' }}>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Filter tabs + search */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          {(['all', 'received', 'assigned', 'contacted', 'ongoing', 'completed'] as const).map(s => (
+                            <button key={s} onClick={() => setPrayerStatusFilter(s)} style={{
+                              padding: '0.3rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                              border: `1px solid ${prayerStatusFilter === s ? '#1e3a8a' : '#e5e7eb'}`,
+                              background: prayerStatusFilter === s ? '#1e3a8a' : '#fff',
+                              color: prayerStatusFilter === s ? '#fff' : '#374151',
+                            }}>
+                              {s === 'all' ? 'All' : STATUS_META[s]?.label ?? s}
+                              {s !== 'all' && <span style={{ marginLeft: '0.35rem', opacity: 0.75 }}>({prayers.filter(p => p.follow_up_status === s).length})</span>}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)' }}>
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                          </svg>
+                          <input type="text" placeholder="Search name or request�" value={prayerSearch} onChange={e => setPrayerSearch(e.target.value)}
+                            style={{ paddingLeft: '2rem', paddingRight: '0.75rem', height: '34px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem', width: '220px' }} />
+                        </div>
+                      </div>
+
+                      {/* Requests list */}
+                      {filtered.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>??</div>
+                          <div style={{ fontWeight: 600 }}>{prayers.length === 0 ? 'No prayer requests yet.' : 'No results for current filters.'}</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          {filtered.map(item => {
+                            const isExpanded = expandedPrayerId === item.id;
+                            const isEditing = editingPrayerId === item.id;
+                            const statusMeta = STATUS_META[item.follow_up_status ?? 'received'] ?? STATUS_META.received;
+                            return (
+                              <div key={item.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden', background: '#fff' }}>
+                                {/* Main row */}
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', padding: '0.9rem 1rem' }}>
+                                  {/* Avatar */}
+                                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: item.confidential ? '#f5f3ff' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0, fontWeight: 700, color: item.confidential ? '#7c3aed' : '#1e3a8a' }}>
+                                    {item.name[0]?.toUpperCase() ?? '?'}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                                      <strong style={{ fontSize: '0.92rem' }}>{item.name}</strong>
+                                      {item.confidential && (
+                                        <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 700, background: '#f5f3ff', color: '#7c3aed' }}>?? CONFIDENTIAL</span>
+                                      )}
+                                      <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.72rem', fontWeight: 600, background: statusMeta.bg, color: statusMeta.color }}>
+                                        {statusMeta.label}
+                                      </span>
+                                      {item.care_request_type && item.care_request_type !== 'none' && (
+                                        <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>{CARE_META[item.care_request_type]}</span>
+                                      )}
+                                    </div>
+                                    <p style={{ fontSize: '0.85rem', color: '#374151', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: isExpanded ? undefined : 2, WebkitBoxOrient: 'vertical' as const }}>
+                                      {item.content}
+                                    </p>
+                                  </div>
+                                  {/* Actions */}
+                                  <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, alignItems: 'center' }}>
+                                    <select
+                                      value={item.follow_up_status ?? 'received'}
+                                      onChange={e => item.id && handlePrayerStatusUpdate(item.id, e.target.value)}
+                                      style={{ fontSize: '0.78rem', padding: '0.25rem 0.4rem', border: '1px solid #e5e7eb', borderRadius: '6px', background: '#f9fafb', color: '#374151', cursor: 'pointer' }}
+                                    >
+                                      <option value="received">Received</option>
+                                      <option value="assigned">Assigned</option>
+                                      <option value="contacted">Contacted</option>
+                                      <option value="ongoing">Ongoing</option>
+                                      <option value="completed">Completed</option>
+                                    </select>
+                                    <button onClick={() => setExpandedPrayerId(isExpanded ? null : item.id!)} className="btn btn-small btn-outline" style={{ fontSize: '0.78rem' }}>
+                                      {isExpanded ? '?' : '?'}
+                                    </button>
+                                    <button onClick={() => item.id && handleEditPrayer(item)} className="btn btn-small btn-outline" style={{ fontSize: '0.78rem' }}>Edit</button>
+                                    <button onClick={() => item.id && handleAdminDeletePrayer(item.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626', fontSize: '0.78rem' }}>Delete</button>
+                                  </div>
+                                </div>
+
+                                {/* Expanded panel */}
+                                {isExpanded && !isEditing && (
+                                  <div style={{ borderTop: '1px solid #e5e7eb', padding: '0.85rem 1rem', background: '#f8fafc', fontSize: '0.85rem' }}>
+                                    <div style={{ marginBottom: '0.6rem' }}>
+                                      <span style={{ fontWeight: 600, color: '#374151' }}>Full Request: </span>
+                                      <span style={{ color: '#4b5563' }}>{item.content}</span>
+                                    </div>
+                                    {item.follow_up_notes && (
+                                      <div style={{ marginBottom: '0.6rem' }}>
+                                        <span style={{ fontWeight: 600, color: '#374151' }}>Follow-up Notes: </span>
+                                        <span style={{ color: '#4b5563' }}>{item.follow_up_notes}</span>
+                                      </div>
+                                    )}
+                                    <div style={{ display: 'flex', gap: '1.5rem', color: '#6b7280', fontSize: '0.78rem', flexWrap: 'wrap' }}>
+                                      <span>Care Type: <strong>{CARE_META[item.care_request_type ?? 'none']}</strong></span>
+                                      <span>Visibility: <strong>{item.confidential ? '?? Confidential' : '?? Public'}</strong></span>
+                                      <span>Status: <strong style={{ color: statusMeta.color }}>{statusMeta.label}</strong></span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Edit row */}
+                                {isEditing && (
+                                  <div style={{ borderTop: '1px solid #e5e7eb', padding: '0.85rem 1rem', background: '#f8fafc' }}>
+                                    <div className="grid grid-2 gap-2" style={{ marginBottom: '0.75rem' }}>
+                                      <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label>Name</label>
+                                        <input value={prayerDrafts[item.id!]?.name ?? item.name} onChange={(e) => setPrayerDrafts(p => ({ ...p, [item.id!]: { ...(p[item.id!] ?? item), name: e.target.value } }))} />
+                                      </div>
+                                      <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label>Visibility</label>
+                                        <select value={(prayerDrafts[item.id!]?.confidential ?? item.confidential) ? 'true' : 'false'} onChange={(e) => setPrayerDrafts(p => ({ ...p, [item.id!]: { ...(p[item.id!] ?? item), confidential: e.target.value === 'true' } }))}>
+                                          <option value="false">Public</option>
+                                          <option value="true">Confidential</option>
+                                        </select>
+                                      </div>
+                                      <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                                        <label>Request</label>
+                                        <textarea rows={3} value={prayerDrafts[item.id!]?.content ?? item.content} onChange={(e) => setPrayerDrafts(p => ({ ...p, [item.id!]: { ...(p[item.id!] ?? item), content: e.target.value } }))} />
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                      <button onClick={() => handleAdminUpdatePrayer(item.id!)} className="btn btn-small btn-accent">Save</button>
+                                      <button onClick={() => setEditingPrayerId(null)} className="btn btn-small btn-outline">Cancel</button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })()}
+
+                  {/* Donations Dashboard */}
+                  {activeAdminTab === 'admin-donations' && (() => {
+                    const FUNDS = ['Tithe', 'Building Fund', 'Offering', 'Go Back To School', 'Outreach', 'Other'];
+                    const METHODS = ['Mobile Money', 'Bank Transfer', 'Cash', 'Card', 'Other'];
+                    const FUND_COLORS: Record<string, string> = {
+                      'Tithe': '#1e3a8a', 'Building Fund': '#059669', 'Offering': '#d97706',
+                      'Go Back To School': '#7c3aed', 'Outreach': '#0891b2', 'Other': '#6b7280',
+                    };
+                    const filtered = donations.filter(d => {
+                      const q = donationSearch.toLowerCase();
+                      const matchesQ = !q || d.fund.toLowerCase().includes(q) || d.method.toLowerCase().includes(q);
+                      const matchesFund = donationFundFilter === 'all' || d.fund === donationFundFilter;
+                      return matchesQ && matchesFund;
+                    });
+                    const totalAll = donations.reduce((s, d) => s + d.amount, 0);
+                    const fundTotals = FUNDS.map(f => ({
+                      fund: f,
+                      total: donations.filter(d => d.fund === f).reduce((s, d) => s + d.amount, 0),
+                      count: donations.filter(d => d.fund === f).length,
+                    })).filter(f => f.count > 0);
+                    const maxFundTotal = Math.max(...fundTotals.map(f => f.total), 1);
+
+                    return (
+                    <div className="admin-tab-content active">
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Donations</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Track tithes, offerings, and all financial contributions to the church.</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button onClick={fetchDonations} className="btn btn-outline btn-small">? Refresh</button>
+                          <button onClick={() => setShowLogDonationForm(v => !v)} className="btn btn-primary btn-small">
+                            {showLogDonationForm ? '? Cancel' : '+ Log Donation'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Log donation form */}
+                      {showLogDonationForm && (
+                        <form onSubmit={handleLogDonation} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                          <h4 style={{ marginBottom: '1rem', color: '#1e3a8a' }}>Log New Donation</h4>
+                          <div className="grid grid-2 gap-2">
+                            <div className="form-group">
+                              <label>Amount (UGX) *</label>
+                              <input type="number" value={logDonationForm.amount} onChange={e => setLogDonationForm(p => ({ ...p, amount: e.target.value }))} placeholder="e.g. 50000" min={1} required />
+                            </div>
+                            <div className="form-group">
+                              <label>Fund *</label>
+                              <select value={logDonationForm.fund} onChange={e => setLogDonationForm(p => ({ ...p, fund: e.target.value }))}>
+                                {FUNDS.map(f => <option key={f} value={f}>{f}</option>)}
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label>Method *</label>
+                              <select value={logDonationForm.method} onChange={e => setLogDonationForm(p => ({ ...p, method: e.target.value }))}>
+                                {METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label>Status</label>
+                              <input type="text" value={logDonationForm.status} onChange={e => setLogDonationForm(p => ({ ...p, status: e.target.value }))} placeholder="e.g. Completed" />
+                            </div>
+                          </div>
+                          <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>Log Donation</button>
+                        </form>
+                      )}
+
+                      {/* Top stat cards */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total Collected', value: `${totalAll.toLocaleString()} UGX`, color: '#1e3a8a', bg: '#eff6ff', icon: '??' },
+                          { label: 'Transactions', value: donations.length, color: '#059669', bg: '#ecfdf5', icon: '??' },
+                          { label: 'This Month', value: `${donations.filter(d => { const m = new Date(); return true; }).reduce((s, d) => s + d.amount, 0).toLocaleString()} UGX`, color: '#d97706', bg: '#fffbeb', icon: '??' },
+                          { label: 'Fund Types', value: new Set(donations.map(d => d.fund)).size, color: '#7c3aed', bg: '#f5f3ff', icon: '??' },
+                        ].map(({ label, value, color, bg, icon }) => (
+                          <div key={label} style={{ padding: '0.85rem 1.1rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, flex: '1', minWidth: '130px' }}>
+                            <div style={{ fontSize: '1.3rem', marginBottom: '0.25rem' }}>{icon}</div>
+                            <div style={{ fontSize: '1.35rem', fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
+                            <div style={{ fontSize: '0.73rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Fund breakdown bars */}
+                      {fundTotals.length > 0 && (
+                        <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.1rem', marginBottom: '1.5rem' }}>
+                          <div style={{ fontWeight: 700, color: '#1e3a8a', marginBottom: '0.85rem', fontSize: '0.9rem' }}>By Fund</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            {fundTotals.map(({ fund, total, count }) => (
+                              <div key={fund}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
+                                  <span style={{ fontWeight: 600, color: '#374151' }}>{fund} <span style={{ color: '#9ca3af', fontWeight: 400 }}>({count})</span></span>
+                                  <span style={{ fontWeight: 700, color: FUND_COLORS[fund] ?? '#6b7280' }}>{total.toLocaleString()} UGX</span>
+                                </div>
+                                <div style={{ height: '7px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${(total / maxFundTotal) * 100}%`, background: FUND_COLORS[fund] ?? '#6b7280', borderRadius: '4px', transition: 'width 0.4s' }} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Search + fund filter */}
+                      <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          {['all', ...FUNDS].map(f => (
+                            <button key={f} onClick={() => setDonationFundFilter(f)} style={{
+                              padding: '0.28rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+                              border: `1px solid ${donationFundFilter === f ? '#1e3a8a' : '#e5e7eb'}`,
+                              background: donationFundFilter === f ? '#1e3a8a' : '#fff',
+                              color: donationFundFilter === f ? '#fff' : '#374151',
+                            }}>
+                              {f === 'all' ? 'All' : f}
+                              {f !== 'all' && donations.filter(d => d.fund === f).length > 0 && (
+                                <span style={{ marginLeft: '0.3rem', opacity: 0.75 }}>({donations.filter(d => d.fund === f).length})</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)' }}>
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                          </svg>
+                          <input type="text" placeholder="Search fund or method�" value={donationSearch} onChange={e => setDonationSearch(e.target.value)}
+                            style={{ paddingLeft: '2rem', paddingRight: '0.75rem', height: '34px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem', width: '200px' }} />
+                        </div>
+                      </div>
+
+                      {/* Table */}
+                      {filtered.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>??</div>
+                          <div style={{ fontWeight: 600 }}>{donations.length === 0 ? 'No contributions logged yet.' : 'No results for current filters.'}</div>
+                          {donations.length === 0 && <div style={{ fontSize: '0.84rem', marginTop: '0.25rem' }}>Click "+ Log Donation" to record the first entry.</div>}
+                        </div>
+                      ) : (
+                        <div className="table-responsive">
+                          <table className="admin-table">
+                            <thead>
+                              <tr>
+                                <th>#</th>
+                                <th>Amount</th>
+                                <th>Fund</th>
+                                <th>Method</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filtered.map((item, idx) => (
                                 editingDonationId === item.id ? (
                                   <tr key={item.id}>
+                                    <td>{idx + 1}</td>
                                     <td><input type="number" value={String(donationDrafts[item.id!]?.amount ?? item.amount)} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), amount: Number(e.target.value) } }))} /></td>
-                                    <td><input value={donationDrafts[item.id!]?.fund ?? item.fund} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), fund: e.target.value } }))} /></td>
-                                    <td><input value={donationDrafts[item.id!]?.method ?? item.method} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), method: e.target.value } }))} /></td>
+                                    <td>
+                                      <select value={donationDrafts[item.id!]?.fund ?? item.fund} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), fund: e.target.value } }))}>
+                                        {FUNDS.map(f => <option key={f} value={f}>{f}</option>)}
+                                      </select>
+                                    </td>
+                                    <td>
+                                      <select value={donationDrafts[item.id!]?.method ?? item.method} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), method: e.target.value } }))}>
+                                        {METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                                      </select>
+                                    </td>
                                     <td><input value={donationDrafts[item.id!]?.status ?? item.status ?? ''} onChange={(e) => setDonationDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), status: e.target.value } }))} /></td>
                                     <td>
                                       <button onClick={() => handleAdminUpdateDonation(item.id!)} className="btn btn-small btn-accent">Save</button>
@@ -7777,262 +9183,1560 @@ export default function App({ entryMode }: AppProps = {}) {
                                   </tr>
                                 ) : (
                                   <tr key={item.id}>
-                                    <td><strong>{item.amount.toLocaleString()} UGX</strong></td>
-                                    <td>{item.fund}</td>
-                                    <td>{item.method}</td>
-                                    <td><span className="badge" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>{item.status || 'Success'}</span></td>
+                                    <td style={{ color: '#9ca3af', fontSize: '0.82rem' }}>{idx + 1}</td>
+                                    <td><strong style={{ color: '#1e3a8a' }}>{item.amount.toLocaleString()} UGX</strong></td>
+                                    <td>
+                                      <span style={{ padding: '0.2rem 0.55rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600, background: `${FUND_COLORS[item.fund] ?? '#6b7280'}15`, color: FUND_COLORS[item.fund] ?? '#6b7280' }}>
+                                        {item.fund}
+                                      </span>
+                                    </td>
+                                    <td style={{ fontSize: '0.85rem' }}>{item.method}</td>
+                                    <td><span className="badge" style={{ background: '#ecfdf5', color: '#059669' }}>{item.status || 'Completed'}</span></td>
                                     <td>
                                       <button onClick={() => item.id && handleEditDonation(item)} className="btn btn-small btn-outline">Edit</button>
+                                      <button onClick={() => item.id && handleDeleteDonation(item.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626' }}>Delete</button>
                                     </td>
                                   </tr>
                                 )
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Manage Events */}
-                  {activeAdminTab === 'admin-events' && (
+                  {activeAdminTab === 'admin-events' && (() => {
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const categories = ['all', ...Array.from(new Set(events.map(e => e.category || 'General')))];
+                    const filtered = events.filter(e => {
+                      const eDate = new Date(e.date); eDate.setHours(0,0,0,0);
+                      const isUpcoming = eDate >= today;
+                      const q = eventSearch.toLowerCase();
+                      const matchesQ = !q || e.title.toLowerCase().includes(q) || e.location.toLowerCase().includes(q);
+                      const matchesTime = eventTimeFilter === 'all' || (eventTimeFilter === 'upcoming' ? isUpcoming : !isUpcoming);
+                      const matchesCat = eventCategoryFilter === 'all' || (e.category || 'General') === eventCategoryFilter;
+                      return matchesQ && matchesTime && matchesCat;
+                    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+                    const upcomingCount = events.filter(e => new Date(e.date) >= today).length;
+                    const publishedCount = events.filter(e => e.is_published !== false).length;
+                    const totalAttendees = events.reduce((s, e) => s + (e.attendee_count || 0), 0);
+                    const totalWaitlist = events.reduce((s, e) => s + (e.waitlist_count || 0), 0);
+
+                    const CAT_COLORS: Record<string, string> = {
+                      'Camp Meeting': '#7c3aed', 'Youth': '#059669', 'Choir': '#0891b2',
+                      'Outreach': '#d97706', 'General': '#1e3a8a', 'Worship': '#dc2626',
+                    };
+
+                    const getDateLabel = (dateStr: string) => {
+                      const d = new Date(dateStr); d.setHours(0,0,0,0);
+                      const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+                      if (diff === 0) return { text: 'TODAY', color: '#dc2626' };
+                      if (diff === 1) return { text: 'TOMORROW', color: '#d97706' };
+                      if (diff > 0 && diff <= 7) return { text: `IN ${diff} DAYS`, color: '#059669' };
+                      if (diff < 0) return { text: 'PAST', color: '#9ca3af' };
+                      return null;
+                    };
+
+                    return (
                     <div className="admin-tab-content active">
-                      <div className="flex justify-between items-center">
-                        <h2>Events Calendar Management</h2>
-                        <button onClick={() => setShowAddEventModal(true)} className="btn btn-accent btn-small">+ Add New Event</button>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Events</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Manage church events, track attendance and waitlists.</p>
+                        </div>
+                        <button onClick={() => setShowAddEventModal(true)} className="btn btn-primary btn-small">+ Add New Event</button>
                       </div>
-                      <div className="table-responsive margin-top-2">
-                        <table className="admin-table">
-                          <thead>
-                            <tr>
-                              <th>Event Name</th>
-                              <th>Date</th>
-                              <th>Location</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {events.map(item => (
-                              <tr key={item.id}>
-                                <td><strong>{item.title}</strong></td>
-                                <td>{item.date}</td>
-                                <td>{item.location}</td>
-                                <td>
-                                    <button onClick={() => openEventEditor(item)} className="btn btn-small btn-outline">Edit</button>
-                                  <button onClick={() => handleAdminDeleteEvent(item.id)} className="btn btn-small btn-outline">Remove</button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total Events', value: events.length, color: '#1e3a8a', bg: '#eff6ff', icon: '??' },
+                          { label: 'Upcoming', value: upcomingCount, color: '#059669', bg: '#ecfdf5', icon: '??' },
+                          { label: 'Published', value: publishedCount, color: '#0891b2', bg: '#ecfeff', icon: '?' },
+                          { label: 'Registered', value: totalAttendees, color: '#7c3aed', bg: '#f5f3ff', icon: '??' },
+                          { label: 'On Waitlist', value: totalWaitlist, color: '#d97706', bg: '#fffbeb', icon: '?' },
+                        ].map(({ label, value, color, bg, icon }) => (
+                          <div key={label} style={{ padding: '0.75rem 1rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, flex: 1, minWidth: '100px' }}>
+                            <div style={{ fontSize: '1.1rem', marginBottom: '0.15rem' }}>{icon}</div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.15rem' }}>{label}</div>
+                          </div>
+                        ))}
                       </div>
+
+                      {/* Filters */}
+                      <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.3rem' }}>
+                          {(['all', 'upcoming', 'past'] as const).map(t => (
+                            <button key={t} onClick={() => setEventTimeFilter(t)} style={{
+                              padding: '0.3rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                              border: `1px solid ${eventTimeFilter === t ? '#1e3a8a' : '#e5e7eb'}`,
+                              background: eventTimeFilter === t ? '#1e3a8a' : '#fff',
+                              color: eventTimeFilter === t ? '#fff' : '#374151',
+                            }}>
+                              {t === 'all' ? `All (${events.length})` : t === 'upcoming' ? `Upcoming (${upcomingCount})` : `Past (${events.length - upcomingCount})`}
+                            </button>
+                          ))}
+                        </div>
+                        <select value={eventCategoryFilter} onChange={e => setEventCategoryFilter(e.target.value)}
+                          style={{ padding: '0.3rem 0.6rem', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '0.82rem', background: '#fff' }}>
+                          {categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All Categories' : c}</option>)}
+                        </select>
+                        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)' }}>
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                          </svg>
+                          <input type="text" placeholder="Search events�" value={eventSearch} onChange={e => setEventSearch(e.target.value)}
+                            style={{ paddingLeft: '2rem', paddingRight: '0.75rem', height: '34px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem', width: '200px' }} />
+                        </div>
+                      </div>
+
+                      {/* Event cards */}
+                      {filtered.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>??</div>
+                          <div style={{ fontWeight: 600 }}>{events.length === 0 ? 'No events yet.' : 'No events match your filters.'}</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {filtered.map(item => {
+                            const eDate = new Date(item.date);
+                            const isPast = eDate < today;
+                            const label = getDateLabel(item.date);
+                            const catColor = CAT_COLORS[item.category || 'General'] ?? '#1e3a8a';
+                            const seatsUsed = item.attendee_count || 0;
+                            const seatsTotal = item.capacity;
+                            const pct = seatsTotal ? Math.min(100, Math.round((seatsUsed / seatsTotal) * 100)) : null;
+
+                            return (
+                              <div key={item.id} style={{
+                                border: '1px solid #e5e7eb',
+                                borderLeft: `4px solid ${isPast ? '#d1d5db' : catColor}`,
+                                borderRadius: '10px', background: isPast ? '#fafafa' : '#fff',
+                                display: 'flex', gap: '1rem', padding: '0.9rem 1rem', alignItems: 'flex-start',
+                                opacity: isPast ? 0.75 : 1,
+                              }}>
+                                {/* Date badge */}
+                                <div style={{ flexShrink: 0, textAlign: 'center', width: '52px' }}>
+                                  <div style={{ background: isPast ? '#f3f4f6' : catColor, color: isPast ? '#9ca3af' : '#fff', borderRadius: '8px', padding: '0.4rem 0.3rem' }}>
+                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                      {eDate.toLocaleDateString('en-US', { month: 'short' })}
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 800, lineHeight: 1 }}>
+                                      {eDate.getDate()}
+                                    </div>
+                                    <div style={{ fontSize: '0.68rem', opacity: 0.8 }}>
+                                      {eDate.getFullYear()}
+                                    </div>
+                                  </div>
+                                  {label && (
+                                    <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', fontWeight: 700, color: label.color, textTransform: 'uppercase' }}>
+                                      {label.text}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Main content */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
+                                    <strong style={{ fontSize: '0.95rem', color: '#111827' }}>{item.title}</strong>
+                                    <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: `${catColor}15`, color: catColor }}>
+                                      {item.category || 'General'}
+                                    </span>
+                                    <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: item.is_published !== false ? '#ecfdf5' : '#fef9c3', color: item.is_published !== false ? '#059669' : '#854d0e' }}>
+                                      {item.is_published !== false ? '? Published' : '?? Draft'}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '0.82rem', color: '#6b7280', marginBottom: '0.3rem' }}>
+                                    ?? {item.location}
+                                  </div>
+                                  {item.desc && (
+                                    <p style={{ fontSize: '0.82rem', color: '#4b5563', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '480px' }}>
+                                      {item.desc}
+                                    </p>
+                                  )}
+                                  {/* Capacity bar */}
+                                  {seatsTotal != null && (
+                                    <div style={{ marginTop: '0.5rem' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.2rem' }}>
+                                        <span>?? {seatsUsed} registered{item.waitlist_count ? ` � ? ${item.waitlist_count} waitlist` : ''}</span>
+                                        <span>{item.seats_remaining != null ? `${item.seats_remaining} seats left` : `${seatsTotal} capacity`}</span>
+                                      </div>
+                                      <div style={{ height: '5px', background: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${pct ?? 0}%`, background: pct != null && pct >= 90 ? '#dc2626' : pct != null && pct >= 70 ? '#d97706' : catColor, borderRadius: '3px' }} />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Actions */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flexShrink: 0, alignItems: 'flex-end' }}>
+                                  <button onClick={() => openEventEditor(item)} className="btn btn-small btn-outline" style={{ fontSize: '0.78rem' }}>?? Edit</button>
+                                  <button
+                                    onClick={() => handleAdminToggleEventPublish(item)}
+                                    className="btn btn-small btn-outline"
+                                    style={{ fontSize: '0.78rem', color: item.is_published !== false ? '#d97706' : '#059669' }}
+                                  >
+                                    {item.is_published !== false ? 'Unpublish' : 'Publish'}
+                                  </button>
+                                  <button onClick={() => handleAdminDeleteEvent(item.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626', fontSize: '0.78rem' }}>?? Remove</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Manage Sermons */}
-                  {activeAdminTab === 'admin-sermons' && (
+                  {activeAdminTab === 'admin-sermons' && (() => {
+                    const CAT_COLORS: Record<string, string> = {
+                      'Sabbath Sermons': '#1e3a8a',
+                      'Week of Prayer': '#7c3aed',
+                      'Bible Studies': '#059669',
+                      'Camp Meeting': '#d97706',
+                      'Youth': '#0891b2',
+                      'Special': '#dc2626',
+                    };
+                    const categories = ['all', ...Array.from(new Set(sermons.map(s => s.category || 'Sabbath Sermons')))];
+                    const filtered = sermons
+                      .filter(s => {
+                        const q = sermonSearch.toLowerCase();
+                        const matchesQ = !q || s.title.toLowerCase().includes(q) || s.speaker.toLowerCase().includes(q) || (s.passage || '').toLowerCase().includes(q);
+                        const matchesCat = sermonCategoryFilter === 'all' || (s.category || 'Sabbath Sermons') === sermonCategoryFilter;
+                        return matchesQ && matchesCat;
+                      })
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                    const catCounts = Object.fromEntries(
+                      categories.filter(c => c !== 'all').map(c => [c, sermons.filter(s => (s.category || 'Sabbath Sermons') === c).length])
+                    );
+
+                    return (
                     <div className="admin-tab-content active">
-                      <div className="flex justify-between items-center">
-                        <h2>Sermon Archive Management</h2>
-                        <button onClick={() => setShowAddSermonModal(true)} className="btn btn-accent btn-small">+ Add New Sermon</button>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Sermon Archive</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Manage all preached sermons, speakers, and scripture references.</p>
+                        </div>
+                        <button onClick={() => setShowAddSermonModal(true)} className="btn btn-primary btn-small">+ Add New Sermon</button>
                       </div>
-                      <div className="table-responsive margin-top-2">
-                        <table className="admin-table">
-                          <thead>
-                            <tr>
-                              <th>Title</th>
-                              <th>Speaker</th>
-                              <th>Date</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {sermons.map(item => (
-                              <tr key={item.id}>
-                                <td><strong>{item.title}</strong></td>
-                                <td>{item.speaker}</td>
-                                <td>{item.date}</td>
-                                <td>
-                                    <button onClick={() => openSermonEditor(item)} className="btn btn-small btn-outline">Edit</button>
-                                  <button onClick={() => handleAdminDeleteSermon(item.id)} className="btn btn-small btn-outline">Remove</button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                        <div style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: '#eff6ff', border: '1px solid #1e3a8a20' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e3a8a', lineHeight: 1 }}>{sermons.length}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>Total Sermons</div>
+                        </div>
+                        {Object.entries(catCounts).map(([cat, count]) => (
+                          <div key={cat} style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: `${CAT_COLORS[cat] ?? '#6b7280'}10`, border: `1px solid ${CAT_COLORS[cat] ?? '#6b7280'}20` }}>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: CAT_COLORS[cat] ?? '#6b7280', lineHeight: 1 }}>{count}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>{cat}</div>
+                          </div>
+                        ))}
                       </div>
+
+                      {/* Filters + search */}
+                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                          {categories.map(c => (
+                            <button key={c} onClick={() => setSermonCategoryFilter(c)} style={{
+                              padding: '0.28rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+                              border: `1px solid ${sermonCategoryFilter === c ? (CAT_COLORS[c] ?? '#1e3a8a') : '#e5e7eb'}`,
+                              background: sermonCategoryFilter === c ? (CAT_COLORS[c] ?? '#1e3a8a') : '#fff',
+                              color: sermonCategoryFilter === c ? '#fff' : '#374151',
+                            }}>
+                              {c === 'all' ? `All (${sermons.length})` : `${c} (${catCounts[c] ?? 0})`}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)' }}>
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                          </svg>
+                          <input type="text" placeholder="Search title, speaker, passage�" value={sermonSearch} onChange={e => setSermonSearch(e.target.value)}
+                            style={{ paddingLeft: '2rem', paddingRight: '0.75rem', height: '34px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem', width: '230px' }} />
+                        </div>
+                      </div>
+
+                      {/* Sermon cards */}
+                      {filtered.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>???</div>
+                          <div style={{ fontWeight: 600 }}>{sermons.length === 0 ? 'No sermons yet.' : 'No results match your filters.'}</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          {filtered.map(item => {
+                            const catColor = CAT_COLORS[item.category || 'Sabbath Sermons'] ?? '#1e3a8a';
+                            const fmtDate = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                            return (
+                              <div key={item.id} style={{
+                                border: '1px solid #e5e7eb',
+                                borderLeft: `4px solid ${catColor}`,
+                                borderRadius: '10px', background: '#fff',
+                                display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.85rem 1rem',
+                              }}>
+                                {/* Speaker avatar */}
+                                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: `${catColor}15`, border: `2px solid ${catColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1rem', color: catColor, flexShrink: 0 }}>
+                                  {item.speaker[0]?.toUpperCase() ?? '?'}
+                                </div>
+
+                                {/* Content */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#111827', marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {item.title}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap', alignItems: 'center', fontSize: '0.8rem', color: '#6b7280' }}>
+                                    <span>?? {item.speaker}</span>
+                                    <span>?? {fmtDate}</span>
+                                    {item.passage && <span style={{ color: catColor, fontWeight: 600 }}>?? {item.passage}</span>}
+                                    <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: `${catColor}15`, color: catColor }}>
+                                      {item.category || 'Sabbath Sermons'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                                  {item.youtube_id && (
+                                    <a href={`https://youtube.com/watch?v=${item.youtube_id}`} target="_blank" rel="noopener noreferrer"
+                                      style={{ padding: '0.3rem 0.65rem', borderRadius: '6px', border: '1px solid #dc2626', background: '#fef2f2', color: '#dc2626', fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                      ? Watch
+                                    </a>
+                                  )}
+                                  <button onClick={() => openSermonEditor(item)} className="btn btn-small btn-outline" style={{ fontSize: '0.78rem' }}>?? Edit</button>
+                                  <button onClick={() => handleAdminDeleteSermon(item.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626', fontSize: '0.78rem' }}>?? Remove</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    );
+                  })()}
+
+                  {/* Testimonies Moderation */}
+                  {activeAdminTab === 'admin-testimonies' && (() => {
+                    const TYPE_META: Record<string, { label: string; color: string; bg: string }> = {
+                      prayer_answered:   { label: 'Prayer Answered',    color: '#1e3a8a', bg: '#eff6ff' },
+                      spiritual_growth:  { label: 'Spiritual Growth',   color: '#059669', bg: '#ecfdf5' },
+                      community_support: { label: 'Community Support',  color: '#7c3aed', bg: '#f5f3ff' },
+                      healing_restoration:{ label: 'Healing & Restoration', color: '#dc2626', bg: '#fef2f2' },
+                      outreach_impact:   { label: 'Outreach Impact',    color: '#d97706', bg: '#fffbeb' },
+                    };
+                    const filtered = testimonies.filter(t => {
+                      const q = testimonySearch.toLowerCase();
+                      const matchesQ = !q || t.title.toLowerCase().includes(q) || (t.author_name || '').toLowerCase().includes(q) || t.content.toLowerCase().includes(q);
+                      if (adminTestimonyFilter === 'pending') return matchesQ && !t.is_approved;
+                      if (adminTestimonyFilter === 'approved') return matchesQ && t.is_approved;
+                      if (adminTestimonyFilter === 'featured') return matchesQ && t.is_featured;
+                      return matchesQ;
+                    });
+                    const pendingCount = testimonies.filter(t => !t.is_approved).length;
+                    const approvedCount = testimonies.filter(t => t.is_approved).length;
+                    const featuredCount = testimonies.filter(t => t.is_featured).length;
+
+                    return (
+                    <div className="admin-tab-content active">
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Testimonies</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Review, approve, feature, or remove member testimonies before they appear publicly.</p>
+                        </div>
+                        <button onClick={() => fetchTestimonies(true)} className="btn btn-outline btn-small">? Refresh</button>
+                      </div>
+
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total', value: testimonies.length, color: '#1e3a8a', bg: '#eff6ff' },
+                          { label: 'Pending Review', value: pendingCount, color: '#d97706', bg: '#fffbeb' },
+                          { label: 'Approved', value: approvedCount, color: '#059669', bg: '#ecfdf5' },
+                          { label: 'Featured', value: featuredCount, color: '#7c3aed', bg: '#f5f3ff' },
+                        ].map(({ label, value, color, bg }) => (
+                          <div key={label} style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, minWidth: '110px' }}>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Filter tabs + search */}
+                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.3rem' }}>
+                          {(['all', 'pending', 'approved', 'featured'] as const).map(f => (
+                            <button key={f} onClick={() => setAdminTestimonyFilter(f)} style={{
+                              padding: '0.28rem 0.65rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                              border: `1px solid ${adminTestimonyFilter === f ? '#1e3a8a' : '#e5e7eb'}`,
+                              background: adminTestimonyFilter === f ? '#1e3a8a' : '#fff',
+                              color: adminTestimonyFilter === f ? '#fff' : '#374151',
+                            }}>
+                              {f === 'all' ? `All (${testimonies.length})` : f === 'pending' ? `Pending (${pendingCount})` : f === 'approved' ? `Approved (${approvedCount})` : `Featured (${featuredCount})`}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)' }}>
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                          </svg>
+                          <input type="text" placeholder="Search testimonies�" value={testimonySearch} onChange={e => setTestimonySearch(e.target.value)}
+                            style={{ paddingLeft: '2rem', paddingRight: '0.75rem', height: '34px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem', width: '210px' }} />
+                        </div>
+                      </div>
+
+                      {/* Cards */}
+                      {filtered.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>?</div>
+                          <div style={{ fontWeight: 600 }}>{testimonies.length === 0 ? 'No testimonies yet.' : 'No results for current filters.'}</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {filtered.map(item => {
+                            const typeMeta = TYPE_META[item.testimony_type || 'spiritual_growth'] ?? TYPE_META.spiritual_growth;
+                            const isActing = adminTestimonyActionId === item.id;
+                            return (
+                              <div key={item.id} style={{
+                                border: '1px solid #e5e7eb',
+                                borderLeft: `4px solid ${typeMeta.color}`,
+                                borderRadius: '10px', background: '#fff', padding: '1rem',
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    {/* Title + badges */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.3rem' }}>
+                                      <strong style={{ fontSize: '0.92rem' }}>{item.title}</strong>
+                                      <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: typeMeta.bg, color: typeMeta.color }}>
+                                        {typeMeta.label}
+                                      </span>
+                                      {item.is_featured && (
+                                        <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: '#f5f3ff', color: '#7c3aed' }}>? Featured</span>
+                                      )}
+                                      {item.is_approved
+                                        ? <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: '#ecfdf5', color: '#059669' }}>? Approved</span>
+                                        : <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: '#fffbeb', color: '#d97706' }}>? Pending</span>
+                                      }
+                                    </div>
+                                    {/* Author + date */}
+                                    <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '0.4rem' }}>
+                                      ?? {item.author_name || 'Anonymous'} � ?? {item.created_at ? new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                                    </div>
+                                    {/* Content preview */}
+                                    <p style={{ fontSize: '0.84rem', color: '#374151', margin: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const }}>
+                                      {item.content}
+                                    </p>
+                                  </div>
+                                  {/* Action buttons */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flexShrink: 0 }}>
+                                    {!item.is_approved ? (
+                                      <button disabled={isActing} onClick={() => handleAdminModerateTestimony(item, { is_approved: true }, 'Testimony approved.')}
+                                        className="btn btn-small" style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #059669', fontSize: '0.78rem' }}>
+                                        {isActing ? '�' : '? Approve'}
+                                      </button>
+                                    ) : (
+                                      <button disabled={isActing} onClick={() => handleAdminModerateTestimony(item, { is_approved: false }, 'Approval removed.')}
+                                        className="btn btn-small btn-outline" style={{ fontSize: '0.78rem', color: '#d97706' }}>
+                                        {isActing ? '�' : 'Unapprove'}
+                                      </button>
+                                    )}
+                                    {!item.is_featured ? (
+                                      <button disabled={isActing} onClick={() => handleAdminModerateTestimony(item, { is_featured: true }, 'Testimony featured.')}
+                                        className="btn btn-small btn-outline" style={{ fontSize: '0.78rem', color: '#7c3aed' }}>
+                                        {isActing ? '�' : '? Feature'}
+                                      </button>
+                                    ) : (
+                                      <button disabled={isActing} onClick={() => handleAdminModerateTestimony(item, { is_featured: false }, 'Removed from featured.')}
+                                        className="btn btn-small btn-outline" style={{ fontSize: '0.78rem', color: '#9ca3af' }}>
+                                        {isActing ? '�' : 'Unfeature'}
+                                      </button>
+                                    )}
+                                    <button disabled={isActing} onClick={() => handleAdminDeleteTestimony(item)}
+                                      className="btn btn-small btn-outline" style={{ color: '#dc2626', fontSize: '0.78rem' }}>
+                                      {isActing ? '�' : '?? Delete'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })()}
 
                   {/* Manage Announcements */}
-                  {activeAdminTab === 'admin-announcements' && (
+                  {activeAdminTab === 'admin-announcements' && (() => {
+                    const PRIORITY_META = {
+                      high:   { label: 'High',   color: '#dc2626', bg: '#fef2f2', dot: '??' },
+                      normal: { label: 'Normal', color: '#0891b2', bg: '#ecfeff', dot: '??' },
+                      low:    { label: 'Low',    color: '#6b7280', bg: '#f3f4f6', dot: '?' },
+                    };
+                    const highCount = announcements.filter(a => a.priority === 'high').length;
+                    const publishedCount = announcements.filter(a => a.is_published !== false).length;
+                    return (
                     <div className="admin-tab-content active">
-                      <h2>Announcements & Notices</h2>
-                      <p className="text-muted">Create announcements here and they will appear on the Notices page for viewers when published.</p>
-
-                      <form onSubmit={handleAdminAddAnnouncement} className="card margin-top-2" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent)' }}>
-                        <h3 style={{ marginBottom: '1rem' }}>➕ Add Announcement</h3>
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Title</label>
-                            <input
-                              type="text"
-                              value={addAnnouncementForm.title}
-                              onChange={e => setAddAnnouncementForm(f => ({ ...f, title: e.target.value }))}
-                              required
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Date</label>
-                            <input
-                              type="date"
-                              value={addAnnouncementForm.date}
-                              onChange={e => setAddAnnouncementForm(f => ({ ...f, date: e.target.value }))}
-                              required
-                            />
-                          </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Announcements</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Create notices that appear on the public Notices page when published.</p>
                         </div>
+                      </div>
 
-                        <div className="grid grid-2 gap-3">
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total', value: announcements.length, color: '#1e3a8a', bg: '#eff6ff' },
+                          { label: 'High Priority', value: highCount, color: '#dc2626', bg: '#fef2f2' },
+                          { label: 'Published', value: publishedCount, color: '#059669', bg: '#ecfdf5' },
+                          { label: 'Drafts', value: announcements.length - publishedCount, color: '#6b7280', bg: '#f3f4f6' },
+                        ].map(({ label, value, color, bg }) => (
+                          <div key={label} style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, minWidth: '110px' }}>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add form */}
+                      <form onSubmit={handleAdminAddAnnouncement} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.75rem' }}>
+                        <h3 style={{ marginBottom: '1rem', color: '#1e3a8a', fontSize: '0.95rem' }}>?? New Announcement</h3>
+                        <div className="grid grid-2 gap-2">
+                          <div className="form-group">
+                            <label>Title *</label>
+                            <input type="text" value={addAnnouncementForm.title} onChange={e => setAddAnnouncementForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Baptism Service � This Sabbath" required />
+                          </div>
+                          <div className="form-group">
+                            <label>Scheduled Date *</label>
+                            <input type="date" value={addAnnouncementForm.date} onChange={e => setAddAnnouncementForm(f => ({ ...f, date: e.target.value }))} required />
+                          </div>
                           <div className="form-group">
                             <label>Priority</label>
-                            <select
-                              value={addAnnouncementForm.priority}
-                              onChange={e => setAddAnnouncementForm(f => ({ ...f, priority: e.target.value as 'high' | 'normal' | 'low' }))}
-                            >
-                              <option value="high">High</option>
-                              <option value="normal">Normal</option>
-                              <option value="low">Low</option>
+                            <select value={addAnnouncementForm.priority} onChange={e => setAddAnnouncementForm(f => ({ ...f, priority: e.target.value as 'high' | 'normal' | 'low' }))}>
+                              <option value="high">?? High</option>
+                              <option value="normal">?? Normal</option>
+                              <option value="low">? Low</option>
                             </select>
                           </div>
                           <div className="form-group">
                             <label>Icon / Emoji</label>
-                            <input
-                              type="text"
-                              value={addAnnouncementForm.icon}
-                              onChange={e => setAddAnnouncementForm(f => ({ ...f, icon: e.target.value }))}
-                              placeholder="📣"
-                            />
+                            <input type="text" value={addAnnouncementForm.icon} onChange={e => setAddAnnouncementForm(f => ({ ...f, icon: e.target.value }))} placeholder="e.g. ?? ?? ?? ??" />
+                          </div>
+                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                            <label>Message *</label>
+                            <textarea value={addAnnouncementForm.body} onChange={e => setAddAnnouncementForm(f => ({ ...f, body: e.target.value }))} required rows={3} placeholder="Write the full announcement text here�" />
+                          </div>
+                          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <input id="ann-pub" type="checkbox" checked={addAnnouncementForm.is_published} onChange={e => setAddAnnouncementForm(f => ({ ...f, is_published: e.target.checked }))} />
+                            <label htmlFor="ann-pub" style={{ margin: 0, fontWeight: 500 }}>Publish immediately</label>
                           </div>
                         </div>
-
-                        <div className="form-group">
-                          <label>Announcement Message</label>
-                          <textarea
-                            value={addAnnouncementForm.body}
-                            onChange={e => setAddAnnouncementForm(f => ({ ...f, body: e.target.value }))}
-                            required
-                            rows={4}
-                          />
-                        </div>
-
-                        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                          <input
-                            id="announcement-published"
-                            type="checkbox"
-                            checked={addAnnouncementForm.is_published}
-                            onChange={e => setAddAnnouncementForm(f => ({ ...f, is_published: e.target.checked }))}
-                          />
-                          <label htmlFor="announcement-published" style={{ margin: 0 }}>Publish immediately</label>
-                        </div>
-
-                        <button type="submit" className="btn btn-accent btn-block">Save Announcement</button>
+                        <button type="submit" className="btn btn-primary" style={{ marginTop: '0.75rem' }}>Save Announcement</button>
                       </form>
 
-                      <div className="margin-top-3">
-                        <h3 style={{ marginBottom: '1rem' }}>Published Announcement Records ({announcements.length})</h3>
-                        {announcements.length === 0 ? (
-                          <p className="text-muted">No announcements available yet.</p>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            {announcements.map(item => (
-                              <div key={item.id} className="card" style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.35rem' }}>
-                                    <span style={{ fontSize: '1.1rem' }}>{item.icon}</span>
-                                    <strong>{item.title}</strong>
+                      {/* List */}
+                      <h3 style={{ margin: '0 0 0.75rem', color: '#1e3a8a', fontSize: '0.92rem', fontWeight: 700 }}>All Announcements ({announcements.length})</h3>
+                      {announcements.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>??</div>
+                          <div style={{ fontWeight: 600 }}>No announcements yet.</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          {[...announcements]
+                            .sort((a, b) => ({ high: 0, normal: 1, low: 2 }[a.priority] ?? 1) - ({ high: 0, normal: 1, low: 2 }[b.priority] ?? 1))
+                            .map(item => {
+                              const pm = PRIORITY_META[item.priority] ?? PRIORITY_META.normal;
+                              const fmtDate = item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+                              return (
+                                <div key={item.id} style={{ border: '1px solid #e5e7eb', borderLeft: `4px solid ${pm.color}`, borderRadius: '10px', background: '#fff', padding: '0.9rem 1rem', display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+                                  <div style={{ fontSize: '1.4rem', flexShrink: 0, marginTop: '0.1rem' }}>{item.icon}</div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
+                                      <strong style={{ fontSize: '0.92rem' }}>{item.title}</strong>
+                                      <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: pm.bg, color: pm.color }}>{pm.dot} {pm.label}</span>
+                                      <span style={{ padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: item.is_published !== false ? '#ecfdf5' : '#fef9c3', color: item.is_published !== false ? '#059669' : '#854d0e' }}>
+                                        {item.is_published !== false ? '? Published' : '?? Draft'}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginBottom: '0.3rem' }}>?? {fmtDate}</div>
+                                    <p style={{ fontSize: '0.85rem', color: '#4b5563', margin: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{item.body}</p>
                                   </div>
-                                  <p style={{ margin: '0 0 0.35rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                                    {item.date} · {item.priority.toUpperCase()} · {item.is_published ? 'Published' : 'Draft'}
-                                  </p>
-                                  <p style={{ margin: 0, fontSize: '0.9rem' }}>{item.body}</p>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flexShrink: 0 }}>
+                                    <button onClick={() => openAnnouncementEditor(item)} className="btn btn-small btn-outline" style={{ fontSize: '0.78rem' }}>?? Edit</button>
+                                    <button onClick={() => handleAdminDeleteAnnouncement(item.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626', fontSize: '0.78rem' }}>?? Remove</button>
+                                  </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                                  <button onClick={() => openAnnouncementEditor(item)} className="btn btn-small btn-outline">Edit</button>
-                                  <button
-                                    onClick={() => handleAdminDeleteAnnouncement(item.id)}
-                                    className="btn btn-small"
-                                    style={{ background: '#FEE2E2', color: '#DC2626', border: 'none' }}
-                                  >
-                                    Remove
-                                  </button>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })()}
+
+                  {/* Blog Posts Management */}
+                  {activeAdminTab === 'admin-blog' && (() => {
+                    const BLOG_CATEGORIES = ['news', 'announcement', 'devotional', 'outreach', 'testimony', 'event_recap'];
+                    const catLabel = (c: string) => c === 'event_recap' ? 'Event Recap' : c.charAt(0).toUpperCase() + c.slice(1);
+                    const catColors: Record<string, { bg: string; color: string }> = {
+                      news:         { bg: '#dbeafe', color: '#1e40af' },
+                      announcement: { bg: '#fde68a', color: '#92400e' },
+                      devotional:   { bg: '#d1fae5', color: '#065f46' },
+                      outreach:     { bg: '#fce7f3', color: '#9d174d' },
+                      testimony:    { bg: '#ede9fe', color: '#5b21b6' },
+                      event_recap:  { bg: '#e0f2fe', color: '#0369a1' },
+                    };
+                    const visiblePosts = blogPosts.filter(p => {
+                      const q = blogSearch.toLowerCase();
+                      const matchQ = !q || p.title.toLowerCase().includes(q) || (p.content || '').toLowerCase().includes(q);
+                      const matchCat = blogCatFilter === 'all' || p.category === blogCatFilter;
+                      const matchSt = blogStatusFilter === 'all' || (blogStatusFilter === 'published' ? p.is_published : !p.is_published);
+                      return matchQ && matchCat && matchSt;
+                    });
+                    const applyFormat = (tag: string, textareaId: string, setter: (v: string) => void, currentVal: string) => {
+                      const el = document.getElementById(textareaId) as HTMLTextAreaElement | null;
+                      if (!el) return;
+                      const start = el.selectionStart;
+                      const end = el.selectionEnd;
+                      const selected = currentVal.slice(start, end);
+                      const wrapped = selected ? `<${tag}>${selected}</${tag}>` : `<${tag}></${tag}>`;
+                      const next = currentVal.slice(0, start) + wrapped + currentVal.slice(end);
+                      setter(next);
+                      setTimeout(() => { el.focus(); el.selectionStart = el.selectionEnd = start + wrapped.length; }, 0);
+                    };
+                    return (
+                    <div className="admin-tab-content active">
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Blog Posts</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Create and manage news, updates, and articles published to the church website.</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button onClick={fetchBlogPosts} className="btn btn-outline btn-small" disabled={blogPostsLoading}>
+                            {blogPostsLoading ? 'Loading…' : '↻ Refresh'}
+                          </button>
+                          <button onClick={() => setShowAddBlogForm(v => !v)} className="btn btn-primary btn-small">
+                            {showAddBlogForm ? '✕ Cancel' : '+ New Post'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Collapsible new post form */}
+                      {showAddBlogForm && (
+                        <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+                          <h3 style={{ marginBottom: '1rem', color: '#1e3a8a', fontSize: '0.95rem' }}>✏️ New Blog Post</h3>
+                          <form onSubmit={async (e) => { await handleCreateBlogPost(e); setShowAddBlogForm(false); }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                              <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                                <label>Title *</label>
+                                <input type="text" value={addBlogForm.title} onChange={e => setAddBlogForm(p => ({ ...p, title: e.target.value }))} placeholder="Post title" required />
+                              </div>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Category</label>
+                                <select value={addBlogForm.category} onChange={e => setAddBlogForm(p => ({ ...p, category: e.target.value }))}>
+                                  {BLOG_CATEGORIES.map(c => <option key={c} value={c}>{catLabel(c)}</option>)}
+                                </select>
+                              </div>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Audience</label>
+                                <input type="text" value={addBlogForm.audience} onChange={e => setAddBlogForm(p => ({ ...p, audience: e.target.value }))} placeholder="e.g. Youth, All" />
+                              </div>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Call-to-Action Text</label>
+                                <input type="text" value={addBlogForm.cta_text} onChange={e => setAddBlogForm(p => ({ ...p, cta_text: e.target.value }))} placeholder="e.g. Register Now" />
+                              </div>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Call-to-Action Link</label>
+                                <input type="url" value={addBlogForm.cta_link} onChange={e => setAddBlogForm(p => ({ ...p, cta_link: e.target.value }))} placeholder="https://..." />
+                              </div>
+                              <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                                <label>Featured Image</label>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                    <input type="url" value={addBlogForm.featured_image} onChange={e => setAddBlogForm(p => ({ ...p, featured_image: e.target.value }))} placeholder="Paste URL or upload…" style={{ flex: 1 }} />
+                                    {addBlogForm.featured_image && (
+                                      <img src={addBlogForm.featured_image} alt="preview" style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0', flexShrink: 0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.opacity = '0.2'; }} />
+                                    )}
+                                  </div>
+                                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.82rem', color: '#1e3a8a', fontWeight: 600, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.3rem 0.7rem', width: 'fit-content' }}>
+                                    📁 Choose File
+                                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={async e => {
+                                      const file = e.target.files?.[0]; if (!file) return;
+                                      try { const url = await uploadProjectImage(file); setAddBlogForm(p => ({ ...p, featured_image: url })); toast.success('Image uploaded.'); }
+                                      catch (err: any) { toast.error(err.message || 'Upload failed.'); }
+                                      e.target.value = '';
+                                    }} />
+                                  </label>
                                 </div>
                               </div>
-                            ))}
+                              <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                                <label>Content *</label>
+                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                                  <div style={{ display: 'flex', gap: '0.25rem', padding: '0.4rem 0.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+                                    {([
+                                      { label: 'B', tag: 'b', style: { fontWeight: 700 } },
+                                      { label: 'I', tag: 'i', style: { fontStyle: 'italic' as const } },
+                                      { label: 'H2', tag: 'h2', style: {} },
+                                      { label: 'H3', tag: 'h3', style: {} },
+                                      { label: '• List', tag: 'li', style: {} },
+                                      { label: 'Link', tag: 'a href=""', style: { color: '#1e40af' } },
+                                    ] as Array<{ label: string; tag: string; style: React.CSSProperties }>).map(({ label, tag, style }) => (
+                                      <button key={tag} type="button"
+                                        onClick={() => applyFormat(tag, 'new-blog-content', v => setAddBlogForm(p => ({ ...p, content: v })), addBlogForm.content)}
+                                        style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '0.78rem', ...style }}
+                                      >{label}</button>
+                                    ))}
+                                  </div>
+                                  <textarea id="new-blog-content" rows={7} value={addBlogForm.content} onChange={e => setAddBlogForm(p => ({ ...p, content: e.target.value }))} placeholder="Write your post content… Select text then click a toolbar button to format it." required style={{ display: 'block', width: '100%', border: 'none', outline: 'none', padding: '0.75rem', fontFamily: 'inherit', fontSize: '0.9rem', resize: 'vertical', boxSizing: 'border-box' }} />
+                                </div>
+                              </div>
+                              <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem', fontWeight: 500 }}>
+                                  <input type="checkbox" checked={addBlogForm.is_published} onChange={e => setAddBlogForm(p => ({ ...p, is_published: e.target.checked }))} />
+                                  Publish immediately
+                                </label>
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem', fontWeight: 500 }}>
+                                  <input type="checkbox" checked={addBlogForm.action_required} onChange={e => setAddBlogForm(p => ({ ...p, action_required: e.target.checked }))} />
+                                  Action required
+                                </label>
+                              </div>
+                            </div>
+                            <div style={{ marginTop: '0.85rem', display: 'flex', gap: '0.5rem' }}>
+                              <button type="submit" className="btn btn-primary btn-small">📢 Publish Post</button>
+                              <button type="button" className="btn btn-outline btn-small" onClick={() => setShowAddBlogForm(false)}>Cancel</button>
+                            </div>
+                          </form>
+                        </div>
+                      )}
 
-                          </div>
+                      {/* Search & filters */}
+                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.25rem' }}>
+                        <input type="text" placeholder="🔍 Search posts…" value={blogSearch} onChange={e => setBlogSearch(e.target.value)}
+                          style={{ flex: 1, minWidth: '180px', padding: '0.45rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.88rem' }} />
+                        <select value={blogCatFilter} onChange={e => setBlogCatFilter(e.target.value)}
+                          style={{ padding: '0.45rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', background: '#fff' }}>
+                          <option value="all">All Categories</option>
+                          {BLOG_CATEGORIES.map(c => <option key={c} value={c}>{catLabel(c)}</option>)}
+                        </select>
+                        <select value={blogStatusFilter} onChange={e => setBlogStatusFilter(e.target.value)}
+                          style={{ padding: '0.45rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', background: '#fff' }}>
+                          <option value="all">All Statuses</option>
+                          <option value="published">Published</option>
+                          <option value="draft">Draft</option>
+                        </select>
+                        {(blogSearch || blogCatFilter !== 'all' || blogStatusFilter !== 'all') && (
+                          <button onClick={() => { setBlogSearch(''); setBlogCatFilter('all'); setBlogStatusFilter('all'); }}
+                            style={{ padding: '0.45rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.82rem', color: '#6b7280', cursor: 'pointer' }}>
+                            ✕ Clear
+                          </button>
                         )}
+                        <span style={{ fontSize: '0.82rem', color: '#6b7280', marginLeft: 'auto' }}>
+                          {visiblePosts.length} of {blogPosts.length} post{blogPosts.length !== 1 ? 's' : ''}
+                        </span>
                       </div>
+
+                      {blogPostsError && <div className="alert-danger" style={{ marginBottom: '1rem', fontSize: '0.88rem' }}>{blogPostsError}</div>}
+
+                      {/* Post cards */}
+                      {blogPostsLoading ? (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>Loading posts…</div>
+                      ) : visiblePosts.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#6b7280', background: '#f8fafc', borderRadius: '10px', border: '1px dashed #e2e8f0' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📝</div>
+                          <p style={{ margin: 0 }}>{blogPosts.length === 0 ? 'No posts yet. Create one above.' : 'No posts match your filters.'}</p>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          {visiblePosts.map(post => {
+                            const isEditing = editingBlogId === post.id;
+                            const draft = blogDrafts[post.id] ?? { ...post };
+                            const cc = catColors[post.category] ?? { bg: '#f1f5f9', color: '#475569' };
+                            const snippet = (post.content || '').replace(/<[^>]+>/g, '').slice(0, 120);
+                            return (
+                              <div key={post.id} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                                {/* View row */}
+                                <div style={{ display: 'flex', gap: '1rem', padding: '1rem 1.25rem', alignItems: 'flex-start' }}>
+                                  <div style={{ width: '72px', height: '72px', flexShrink: 0, borderRadius: '8px', overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    {post.featured_image
+                                      ? <img src={post.featured_image} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                                      : <span style={{ fontSize: '1.75rem' }}>📰</span>}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.3rem' }}>
+                                      <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '20px', background: cc.bg, color: cc.color }}>{catLabel(post.category)}</span>
+                                      <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '20px', background: post.is_published ? '#dcfce7' : '#fef9c3', color: post.is_published ? '#166534' : '#854d0e' }}>
+                                        {post.is_published ? '● Published' : '○ Draft'}
+                                      </span>
+                                      {post.action_required && <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '20px', background: '#fee2e2', color: '#991b1b' }}>⚠ Action Required</span>}
+                                    </div>
+                                    <h4 style={{ margin: '0 0 0.2rem', fontSize: '0.97rem', fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.title}</h4>
+                                    <p style={{ margin: '0 0 0.3rem', fontSize: '0.82rem', color: '#6b7280', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as React.CSSProperties['WebkitBoxOrient'] }}>{snippet}{snippet.length >= 120 ? '…' : ''}</p>
+                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                      {post.author_name || 'Admin'} · {post.created_at ? new Date(post.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                    <button onClick={() => { setEditingBlogId(isEditing ? null : post.id); if (!isEditing) setBlogDrafts(prev => ({ ...prev, [post.id]: { ...post } })); }}
+                                      className="btn btn-small btn-outline" style={{ minWidth: '62px' }}>
+                                      {isEditing ? '✕ Close' : '✏️ Edit'}
+                                    </button>
+                                    <button onClick={() => handleToggleBlogPublished(post)} className="btn btn-small btn-outline" style={{ minWidth: '88px' }}>
+                                      {post.is_published ? '🙈 Unpublish' : '📢 Publish'}
+                                    </button>
+                                    <button onClick={() => handleDeleteBlogPost(post.id)} className="btn btn-small"
+                                      style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', minWidth: '62px' }}>
+                                      🗑 Delete
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Inline edit panel */}
+                                {isEditing && (
+                                  <div style={{ borderTop: '1px solid #e2e8f0', padding: '1rem 1.25rem', background: '#f8fafc' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                                      <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.75rem' }}>Title</label>
+                                        <input type="text" value={draft.title ?? ''} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, title: e.target.value } }))} />
+                                      </div>
+                                      <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.75rem' }}>Category</label>
+                                        <select value={draft.category ?? 'news'} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, category: e.target.value } }))}>
+                                          {BLOG_CATEGORIES.map(c => <option key={c} value={c}>{catLabel(c)}</option>)}
+                                        </select>
+                                      </div>
+                                      <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.75rem' }}>Status</label>
+                                        <select value={draft.is_published ? 'published' : 'draft'} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, is_published: e.target.value === 'published' } }))}>
+                                          <option value="published">Published</option>
+                                          <option value="draft">Draft</option>
+                                        </select>
+                                      </div>
+                                      <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.75rem' }}>Audience</label>
+                                        <input type="text" value={draft.audience ?? ''} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, audience: e.target.value } }))} placeholder="e.g. Youth, All" />
+                                      </div>
+                                      <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.75rem' }}>CTA Text</label>
+                                        <input type="text" value={draft.cta_text ?? ''} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, cta_text: e.target.value } }))} />
+                                      </div>
+                                      <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.75rem' }}>CTA Link</label>
+                                        <input type="url" value={draft.cta_link ?? ''} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, cta_link: e.target.value } }))} placeholder="https://..." />
+                                      </div>
+                                      <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.75rem' }}>Featured Image</label>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                            <input type="url" value={draft.featured_image ?? ''} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, featured_image: e.target.value } }))} placeholder="Paste URL or upload…" style={{ flex: 1 }} />
+                                            {draft.featured_image && (
+                                              <img src={draft.featured_image} alt="preview" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '5px', border: '1px solid #e2e8f0', flexShrink: 0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.opacity = '0.2'; }} />
+                                            )}
+                                          </div>
+                                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.78rem', color: '#1e3a8a', fontWeight: 600, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.25rem 0.6rem', width: 'fit-content' }}>
+                                            📁 Choose File
+                                            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={async e => {
+                                              const file = e.target.files?.[0]; if (!file) return;
+                                              try { const url = await uploadProjectImage(file); setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, featured_image: url } })); toast.success('Image uploaded.'); }
+                                              catch (err: any) { toast.error(err.message || 'Upload failed.'); }
+                                              e.target.value = '';
+                                            }} />
+                                          </label>
+                                        </div>
+                                      </div>
+                                      <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                                        <label style={{ fontSize: '0.75rem' }}>Content</label>
+                                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                                          <div style={{ display: 'flex', gap: '0.25rem', padding: '0.35rem 0.5rem', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+                                            {([
+                                              { label: 'B', tag: 'b', style: { fontWeight: 700 } },
+                                              { label: 'I', tag: 'i', style: { fontStyle: 'italic' as const } },
+                                              { label: 'H2', tag: 'h2', style: {} },
+                                              { label: 'H3', tag: 'h3', style: {} },
+                                              { label: '• List', tag: 'li', style: {} },
+                                              { label: 'Link', tag: 'a href=""', style: { color: '#1e40af' } },
+                                            ] as Array<{ label: string; tag: string; style: React.CSSProperties }>).map(({ label, tag, style }) => (
+                                              <button key={tag} type="button"
+                                                onClick={() => applyFormat(tag, `edit-blog-content-${post.id}`, v => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, content: v } })), draft.content ?? '')}
+                                                style={{ padding: '0.18rem 0.45rem', borderRadius: '4px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '0.75rem', ...style }}
+                                              >{label}</button>
+                                            ))}
+                                          </div>
+                                          <textarea id={`edit-blog-content-${post.id}`} rows={6} value={draft.content ?? ''} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, content: e.target.value } }))} style={{ display: 'block', width: '100%', border: 'none', outline: 'none', padding: '0.75rem', fontFamily: 'inherit', fontSize: '0.88rem', resize: 'vertical', boxSizing: 'border-box' }} />
+                                        </div>
+                                      </div>
+                                      <div style={{ gridColumn: '1 / -1' }}>
+                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 500 }}>
+                                          <input type="checkbox" checked={draft.action_required ?? false} onChange={e => setBlogDrafts(prev => ({ ...prev, [post.id]: { ...draft, action_required: e.target.checked } }))} />
+                                          Action required
+                                        </label>
+                                      </div>
+                                    </div>
+                                    <div style={{ marginTop: '0.85rem', display: 'flex', gap: '0.5rem' }}>
+                                      <button onClick={() => handleUpdateBlogPost(post.id)} className="btn btn-primary btn-small">💾 Save Changes</button>
+                                      <button onClick={() => { setEditingBlogId(null); setBlogDrafts(prev => { const n = { ...prev }; delete n[post.id]; return n; }); }} className="btn btn-small btn-outline">Discard</button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })()}
+
+                  {activeAdminTab === 'admin-staff' && (
+                    <div className="admin-tab-content active">
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Staff Directory</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Manage church staff profiles displayed on the public Staff page.</p>
+                        </div>
+                        <button onClick={() => fetchStaffDirectory(true)} className="btn btn-outline btn-small" disabled={staffLoading}>
+                          {staffLoading ? 'Loading�' : '? Refresh'}
+                        </button>
+                      </div>
+
+                      {/* Add / Edit form */}
+                      <form onSubmit={saveStaffRecord} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.75rem' }}>
+                        <h3 style={{ marginBottom: '1rem', color: '#1e3a8a', fontSize: '0.95rem' }}>
+                          {editingStaffId ? '?? Edit Staff Profile' : '? Add Staff Member'}
+                        </h3>
+                        <div className="grid grid-2 gap-2">
+                          <div className="form-group">
+                            <label>User ID * <span style={{ color: '#9ca3af', fontWeight: 400, fontSize: '0.82rem' }}>(Django user ID)</span></label>
+                            <input type="number" value={staffForm.user} onChange={e => setStaffForm(p => ({ ...p, user: e.target.value }))} placeholder="e.g. 1" required />
+                          </div>
+                          <div className="form-group">
+                            <label>Full Name</label>
+                            <input type="text" value={staffForm.position} onChange={e => setStaffForm(p => ({ ...p, position: e.target.value }))} placeholder="e.g. Lead Pastor" required />
+                          </div>
+                          <div className="form-group">
+                            <label>Position *</label>
+                            <input type="text" value={staffForm.position} onChange={e => setStaffForm(p => ({ ...p, position: e.target.value }))} placeholder="e.g. Lead Pastor" required />
+                          </div>
+                          <div className="form-group">
+                            <label>Department *</label>
+                            <input type="text" value={staffForm.department} onChange={e => setStaffForm(p => ({ ...p, department: e.target.value }))} placeholder="e.g. Pastoral" required />
+                          </div>
+                          <div className="form-group">
+                            <label>Email *</label>
+                            <input type="email" value={staffForm.email} onChange={e => setStaffForm(p => ({ ...p, email: e.target.value }))} required />
+                          </div>
+                          <div className="form-group">
+                            <label>Phone</label>
+                            <input type="text" value={staffForm.phone} onChange={e => setStaffForm(p => ({ ...p, phone: e.target.value }))} placeholder="e.g. +256 700 000 000" />
+                          </div>
+                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                            <label>Profile Photo</label>
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                              {/* Preview */}
+                              <div style={{
+                                width: '80px', height: '80px', borderRadius: '50%', flexShrink: 0,
+                                background: staffForm.photo ? `url(${staffForm.photo}) center/cover` : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '1.6rem', color: 'rgba(255,255,255,0.6)',
+                                border: '2px solid #e5e7eb',
+                              }}>
+                                {!staffForm.photo && '??'}
+                              </div>
+                              <div style={{ flex: 1, minWidth: '200px' }}>
+                                {/* File upload */}
+                                <label style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                                  padding: '0.5rem 1rem', borderRadius: '8px',
+                                  border: '1px dashed #1e3a8a', background: '#eff6ff',
+                                  color: '#1e3a8a', fontWeight: 600, fontSize: '0.85rem',
+                                  cursor: 'pointer', marginBottom: '0.5rem',
+                                }}>
+                                  ?? Choose Photo
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={e => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      const reader = new FileReader();
+                                      reader.onload = ev => {
+                                        setStaffForm(p => ({ ...p, photo: ev.target?.result as string }));
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }}
+                                  />
+                                </label>
+                                {/* Or paste URL */}
+                                <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.35rem' }}>or paste a URL:</div>
+                                <input
+                                  type="text"
+                                  value={staffForm.photo.startsWith('data:') ? '' : staffForm.photo}
+                                  onChange={e => setStaffForm(p => ({ ...p, photo: e.target.value }))}
+                                  placeholder="https://example.com/photo.jpg"
+                                  style={{ width: '100%', fontSize: '0.85rem' }}
+                                />
+                                {staffForm.photo && (
+                                  <button type="button" onClick={() => setStaffForm(p => ({ ...p, photo: '' }))}
+                                    style={{ marginTop: '0.35rem', fontSize: '0.75rem', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                                    ? Remove photo
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="form-group">
+                            <label>Display Order</label>
+                            <input type="number" value={staffForm.order} onChange={e => setStaffForm(p => ({ ...p, order: e.target.value }))} min={0} placeholder="0" />
+                          </div>
+                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                            <label>Bio *</label>
+                            <textarea rows={3} value={staffForm.bio} onChange={e => setStaffForm(p => ({ ...p, bio: e.target.value }))} placeholder="Short biographical description�" required />
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                          <button type="submit" className="btn btn-primary">{editingStaffId ? 'Save Changes' : 'Add Staff Member'}</button>
+                          {editingStaffId && (
+                            <button type="button" className="btn btn-outline" onClick={() => { setEditingStaffId(null); setStaffForm({ user: '', position: '', department: '', bio: '', photo: '', email: '', phone: '', order: '0' }); }}>
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </form>
+
+                      {staffError && <div className="alert-danger" style={{ marginBottom: '0.75rem', fontSize: '0.88rem' }}>{staffError}</div>}
+
+                      {/* Staff cards grid */}
+                      {staffLoading ? (
+                        <p className="text-muted">Loading staff records�</p>
+                      ) : staffDirectory.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>?????</div>
+                          <div style={{ fontWeight: 600 }}>No staff profiles yet.</div>
+                          <div style={{ fontSize: '0.84rem', marginTop: '0.25rem' }}>Use the form above to add the first staff member.</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.85rem' }}>
+                          {[...staffDirectory].sort((a, b) => a.order - b.order).map(member => (
+                            <div key={member.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', background: '#fff', overflow: 'hidden' }}>
+                              {/* Photo */}
+                              <div style={{ height: '120px', background: member.photo ? `url(${member.photo}) center/cover` : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {!member.photo && (
+                                  <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, color: '#fff' }}>
+                                    {(member.name || member.position)[0]?.toUpperCase() ?? '?'}
+                                  </div>
+                                )}
+                              </div>
+                              {/* Info */}
+                              <div style={{ padding: '0.85rem' }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#111827', marginBottom: '0.1rem' }}>{member.name || '�'}</div>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#1e3a8a', marginBottom: '0.1rem' }}>{member.position}</div>
+                                <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.4rem' }}>{member.department}</div>
+                                {member.email && <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>?? {member.email}</div>}
+                                {member.phone && <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>?? {member.phone}</div>}
+                                <p style={{ fontSize: '0.78rem', color: '#4b5563', margin: '0.5rem 0 0', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{member.bio}</p>
+                                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.65rem' }}>
+                                  <button onClick={() => { setEditingStaffId(member.id); setStaffForm({ user: String(member.user), position: member.position, department: member.department, bio: member.bio, photo: member.photo, email: member.email, phone: member.phone, order: String(member.order) }); }} className="btn btn-small btn-outline" style={{ flex: 1, fontSize: '0.78rem' }}>?? Edit</button>
+                                  <button onClick={() => removeStaffRecord(member.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626', fontSize: '0.78rem' }}>??</button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Go Back To School Page Editor */}
+                  {activeAdminTab === 'admin-go-back-to-school' && (
+                    <div className="admin-tab-content active">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Go Back To School</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Edit the hero section, fundraising copy, and overall stats shown on the public Go Back To School page.</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button onClick={handleResetGoBackToSchool} className="btn btn-outline btn-small">? Reset to Default</button>
+                          <button onClick={handleSaveGoBackToSchool} className="btn btn-primary btn-small">?? Save Changes</button>
+                        </div>
+                      </div>
+
+                      {goBackToSchoolError && (
+                        <div className="alert-danger" style={{ marginBottom: '1rem', fontSize: '0.88rem' }}>{goBackToSchoolError}</div>
+                      )}
+
+                      {/* Hero section */}
+                      <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                        <h3 style={{ marginBottom: '1rem', color: '#1e3a8a', fontSize: '0.92rem' }}>?? Hero Section</h3>
+                        <div className="grid grid-2 gap-2">
+                          <div className="form-group">
+                            <label>Hero Title</label>
+                            <input type="text" value={goBackToSchoolForm.hero_title} onChange={e => setGoBackToSchoolForm(p => ({ ...p, hero_title: e.target.value }))} placeholder="e.g. Go Back To School" />
+                          </div>
+                          <div className="form-group">
+                            <label>Hero Subtitle</label>
+                            <input type="text" value={goBackToSchoolForm.hero_subtitle} onChange={e => setGoBackToSchoolForm(p => ({ ...p, hero_subtitle: e.target.value }))} placeholder="e.g. Helping students return to school" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Fundraising section */}
+                      <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                        <h3 style={{ marginBottom: '1rem', color: '#059669', fontSize: '0.92rem' }}>?? Overall Fundraising</h3>
+                        <div className="form-group">
+                          <label>Fundraising Section Title</label>
+                          <input type="text" value={goBackToSchoolForm.overall_fundraising_title} onChange={e => setGoBackToSchoolForm(p => ({ ...p, overall_fundraising_title: e.target.value }))} placeholder="e.g. Our Collective Impact" />
+                        </div>
+                        <div className="form-group">
+                          <label>Fundraising Copy</label>
+                          <textarea rows={3} value={goBackToSchoolForm.overall_fundraising_copy} onChange={e => setGoBackToSchoolForm(p => ({ ...p, overall_fundraising_copy: e.target.value }))} placeholder="Describe the fundraising effort�" />
+                        </div>
+                      </div>
+
+                      {/* Overall stats */}
+                      <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                        <h3 style={{ marginBottom: '1rem', color: '#7c3aed', fontSize: '0.92rem' }}>?? Impact Stats</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+                          {goBackToSchoolForm.overall_stats.map((stat, i) => (
+                            <div key={i} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '0.85rem' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Stat {i + 1}</div>
+                              <div className="form-group" style={{ marginBottom: '0.4rem' }}>
+                                <label style={{ fontSize: '0.8rem' }}>Value</label>
+                                <input type="text" value={stat.value} onChange={e => {
+                                  const next = [...goBackToSchoolForm.overall_stats];
+                                  next[i] = { ...next[i], value: e.target.value };
+                                  setGoBackToSchoolForm(p => ({ ...p, overall_stats: next }));
+                                }} placeholder="e.g. 150+" />
+                              </div>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label style={{ fontSize: '0.8rem' }}>Label</label>
+                                <input type="text" value={stat.label} onChange={e => {
+                                  const next = [...goBackToSchoolForm.overall_stats];
+                                  next[i] = { ...next[i], label: e.target.value };
+                                  setGoBackToSchoolForm(p => ({ ...p, overall_stats: next }));
+                                }} placeholder="e.g. Students Helped" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Live preview */}
+                      <div style={{ background: 'linear-gradient(135deg, #14532d, #166534)', borderRadius: '10px', padding: '1.5rem', color: '#fff' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(134,239,172,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Live Preview</div>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.25rem', fontFamily: 'var(--font-serif)' }}>{goBackToSchoolForm.hero_title || 'Hero Title'}</div>
+                        <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '1rem' }}>{goBackToSchoolForm.hero_subtitle || 'Hero subtitle�'}</div>
+                        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                          {goBackToSchoolForm.overall_stats.map((stat, i) => (
+                            <div key={i} style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#86efac' }}>{stat.value}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)' }}>{stat.label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '1rem', textAlign: 'right' }}>
+                        <button onClick={handleSaveGoBackToSchool} className="btn btn-primary">?? Save Changes</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Community Outreach Page Editor */}
+                  {activeAdminTab === 'admin-community-outreach' && (
+                    <div className="admin-tab-content active">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Community Outreach Page</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Edit the hero section and impact stats shown on the public Community Outreach page.</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button onClick={handleResetCommunityOutreach} className="btn btn-outline btn-small">? Reset to Default</button>
+                          <button onClick={handleSaveCommunityOutreach} className="btn btn-primary btn-small">?? Save Changes</button>
+                        </div>
+                      </div>
+
+                      {communityOutreachError && (
+                        <div className="alert-danger" style={{ marginBottom: '1rem', fontSize: '0.88rem' }}>{communityOutreachError}</div>
+                      )}
+
+                      {/* Hero section editor */}
+                      <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                        <h3 style={{ marginBottom: '1rem', color: '#1e3a8a', fontSize: '0.92rem' }}>?? Hero Section</h3>
+                        <div className="grid grid-2 gap-2">
+                          <div className="form-group">
+                            <label>Hero Title</label>
+                            <input type="text" value={communityOutreachForm.hero_title} onChange={e => setCommunityOutreachForm(p => ({ ...p, hero_title: e.target.value }))} placeholder="e.g. Reaching Our Community" />
+                          </div>
+                          <div className="form-group">
+                            <label>Hero Subtitle</label>
+                            <input type="text" value={communityOutreachForm.hero_subtitle} onChange={e => setCommunityOutreachForm(p => ({ ...p, hero_subtitle: e.target.value }))} placeholder="e.g. Through faith, service, and love" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Stats editor */}
+                      <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                        <h3 style={{ marginBottom: '1rem', color: '#1e3a8a', fontSize: '0.92rem' }}>?? Impact Stats</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                          {communityOutreachForm.stats.map((stat, i) => (
+                            <div key={i} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '0.85rem' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Stat {i + 1}</div>
+                              <div className="form-group" style={{ marginBottom: '0.4rem' }}>
+                                <label style={{ fontSize: '0.8rem' }}>Value</label>
+                                <input type="text" value={stat.value} onChange={e => {
+                                  const next = [...communityOutreachForm.stats];
+                                  next[i] = { ...next[i], value: e.target.value };
+                                  setCommunityOutreachForm(p => ({ ...p, stats: next }));
+                                }} placeholder="e.g. 500+" />
+                              </div>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label style={{ fontSize: '0.8rem' }}>Label</label>
+                                <input type="text" value={stat.label} onChange={e => {
+                                  const next = [...communityOutreachForm.stats];
+                                  next[i] = { ...next[i], label: e.target.value };
+                                  setCommunityOutreachForm(p => ({ ...p, stats: next }));
+                                }} placeholder="e.g. Families Served" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Live preview bar */}
+                      <div style={{ background: 'linear-gradient(135deg, #0f172a, #1e3a8a)', borderRadius: '10px', padding: '1.5rem', color: '#fff' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(212,175,55,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Live Preview</div>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.25rem', fontFamily: 'var(--font-serif)' }}>{communityOutreachForm.hero_title || 'Hero Title'}</div>
+                        <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)', marginBottom: '1rem' }}>{communityOutreachForm.hero_subtitle || 'Hero subtitle�'}</div>
+                        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                          {communityOutreachForm.stats.map((stat, i) => (
+                            <div key={i} style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#D4AF37' }}>{stat.value}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)' }}>{stat.label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '1rem', textAlign: 'right' }}>
+                        <button onClick={handleSaveCommunityOutreach} className="btn btn-primary">?? Save Changes</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Hymns Library */}
+                  {activeAdminTab === 'admin-hymns' && (
+                    <div className="admin-tab-content active">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Hymns Library</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Manage hymn books and individual hymns available on the public Hymns page.</p>
+                        </div>
+                        <button onClick={fetchHymnsAdmin} className="btn btn-outline btn-small" disabled={hymnsLoading}>
+                          {hymnsLoading ? 'Loading�' : '? Refresh'}
+                        </button>
+                      </div>
+
+                      {hymnsError && <div className="alert-danger" style={{ marginBottom: '0.75rem', fontSize: '0.88rem' }}>{hymnsError}</div>}
+
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: '#eff6ff', border: '1px solid #1e3a8a20' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e3a8a', lineHeight: 1 }}>{hymnBooks.length}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>Hymn Books</div>
+                        </div>
+                        <div style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: '#ecfdf5', border: '1px solid #05996920' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669', lineHeight: 1 }}>{hymns.length}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>Total Hymns</div>
+                        </div>
+                        <div style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: '#fffbeb', border: '1px solid #d9770620' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#d97706', lineHeight: 1 }}>{hymnBooks.filter(b => b.is_featured).length}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>Featured Books</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-2 gap-3">
+                        {/* Add Hymn Book */}
+                        <form onSubmit={createHymnBook} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                          <h3 style={{ marginBottom: '0.75rem', color: '#1e3a8a', fontSize: '0.92rem' }}>?? New Hymn Book</h3>
+                          <div className="form-group"><label>Title *</label><input type="text" value={newHymnBook.title} onChange={e => setNewHymnBook(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Seventh-day Adventist Hymnal" required /></div>
+                          <div className="form-group"><label>Abbreviation *</label><input type="text" value={newHymnBook.abbreviation} onChange={e => setNewHymnBook(p => ({ ...p, abbreviation: e.target.value }))} placeholder="e.g. SDAH" required /></div>
+                          <div className="form-group"><label>Publisher</label><input type="text" value={newHymnBook.publisher} onChange={e => setNewHymnBook(p => ({ ...p, publisher: e.target.value }))} placeholder="Review and Herald" /></div>
+                          <div className="form-group"><label>Year</label><input type="number" value={newHymnBook.year} onChange={e => setNewHymnBook(p => ({ ...p, year: e.target.value }))} placeholder="e.g. 1985" /></div>
+                          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <input type="checkbox" id="hb-featured" checked={newHymnBook.is_featured} onChange={e => setNewHymnBook(p => ({ ...p, is_featured: e.target.checked }))} />
+                            <label htmlFor="hb-featured" style={{ margin: 0, fontWeight: 500 }}>Featured book</label>
+                          </div>
+                          <button type="submit" className="btn btn-primary btn-small">Create Book</button>
+                        </form>
+
+                        {/* Add Hymn */}
+                        <form onSubmit={createHymn} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                          <h3 style={{ marginBottom: '0.75rem', color: '#059669', fontSize: '0.92rem' }}>?? Add Hymn</h3>
+                          <div className="form-group">
+                            <label>Hymn Book *</label>
+                            <select value={newHymn.hymn_book} onChange={e => setNewHymn(p => ({ ...p, hymn_book: e.target.value }))} required>
+                              <option value="">� Select book �</option>
+                              {hymnBooks.map(b => <option key={b.id} value={b.id}>{b.abbreviation} � {b.title}</option>)}
+                            </select>
+                          </div>
+                          <div className="grid grid-2 gap-2" style={{ marginBottom: 0 }}>
+                            <div className="form-group"><label>Number *</label><input type="number" value={newHymn.number} onChange={e => setNewHymn(p => ({ ...p, number: e.target.value }))} placeholder="e.g. 1" required /></div>
+                            <div className="form-group"><label>Title *</label><input type="text" value={newHymn.title} onChange={e => setNewHymn(p => ({ ...p, title: e.target.value }))} placeholder="Hymn title" required /></div>
+                          </div>
+                          <div className="form-group"><label>Author</label><input type="text" value={newHymn.author} onChange={e => setNewHymn(p => ({ ...p, author: e.target.value }))} placeholder="e.g. Isaac Watts" /></div>
+                          <div className="form-group"><label>Theme</label><input type="text" value={newHymn.theme} onChange={e => setNewHymn(p => ({ ...p, theme: e.target.value }))} placeholder="e.g. Praise, Worship" /></div>
+                          <div className="form-group"><label>Lyrics *</label><textarea rows={3} value={newHymn.lyrics} onChange={e => setNewHymn(p => ({ ...p, lyrics: e.target.value }))} placeholder="Verse 1:&#10;..." required /></div>
+                          <button type="submit" className="btn btn-primary btn-small" style={{ background: '#059669', borderColor: '#059669' }}>Add Hymn</button>
+                        </form>
+                      </div>
+
+                      {/* Books list */}
+                      {hymnBooks.length > 0 && (
+                        <div style={{ marginTop: '1.5rem' }}>
+                          <h3 style={{ marginBottom: '0.75rem', color: '#1e3a8a', fontWeight: 700, fontSize: '0.92rem' }}>Hymn Books ({hymnBooks.length})</h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {hymnBooks.map(book => {
+                              const bookHymns = hymns.filter(h => h.hymn_book === book.id);
+                              return (
+                                <div key={book.id} style={{ border: '1px solid #e5e7eb', borderLeft: `4px solid #1e3a8a`, borderRadius: '10px', padding: '0.75rem 1rem', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
+                                      <strong style={{ fontSize: '0.92rem' }}>{book.title}</strong>
+                                      <span style={{ padding: '0.15rem 0.45rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: '#eff6ff', color: '#1e3a8a' }}>{book.abbreviation}</span>
+                                      {book.is_featured && <span style={{ padding: '0.15rem 0.45rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: '#fffbeb', color: '#d97706' }}>? Featured</span>}
+                                    </div>
+                                    <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>
+                                      {book.publisher}{book.year ? ` � ${book.year}` : ''} � {bookHymns.length} hymns loaded
+                                    </div>
+                                  </div>
+                                  <button onClick={() => setSelectedHymnBookId(book.id === selectedHymnBookId ? 'all' : book.id)} className="btn btn-small btn-outline" style={{ fontSize: '0.78rem' }}>
+                                    {selectedHymnBookId === book.id ? 'Show All' : 'View Hymns'}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Hymns table */}
+                      {hymns.length > 0 && (
+                        <div style={{ marginTop: '1.25rem' }}>
+                          <h3 style={{ marginBottom: '0.75rem', color: '#059669', fontWeight: 700, fontSize: '0.92rem' }}>
+                            Hymns {selectedHymnBookId !== 'all' ? `� ${hymnBooks.find(b => b.id === selectedHymnBookId)?.abbreviation}` : '(All Books)'} ({selectedHymnBookId === 'all' ? hymns.length : hymns.filter(h => h.hymn_book === selectedHymnBookId).length})
+                          </h3>
+                          <div className="table-responsive">
+                            <table className="admin-table">
+                              <thead>
+                                <tr>
+                                  <th>#</th>
+                                  <th>Title</th>
+                                  <th>Author</th>
+                                  <th>Theme</th>
+                                  <th>Book</th>
+                                  <th>Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(selectedHymnBookId === 'all' ? hymns : hymns.filter(h => h.hymn_book === selectedHymnBookId))
+                                  .sort((a, b) => a.number - b.number)
+                                  .map(hymn => (
+                                    <tr key={hymn.id}>
+                                      <td style={{ color: '#9ca3af', fontSize: '0.82rem', fontWeight: 700 }}>{hymn.number}</td>
+                                      <td><strong style={{ fontSize: '0.88rem' }}>{hymn.title}</strong></td>
+                                      <td style={{ fontSize: '0.82rem' }}>{hymn.author || '�'}</td>
+                                      <td style={{ fontSize: '0.82rem' }}>{hymn.theme || '�'}</td>
+                                      <td><span className="badge" style={{ fontSize: '0.72rem' }}>{hymn.hymn_book_abbr || hymnBooks.find(b => b.id === hymn.hymn_book)?.abbreviation || '�'}</span></td>
+                                      <td>
+                                        <button onClick={() => removeHymn(hymn.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626', fontSize: '0.78rem' }}>??</button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Forums Management */}
+                  {activeAdminTab === 'admin-forums' && (
+                    <div className="admin-tab-content active">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Forums</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Manage forum categories and moderate discussion threads.</p>
+                        </div>
+                        <button onClick={fetchForumsAdmin} className="btn btn-outline btn-small" disabled={forumsLoading}>
+                          {forumsLoading ? 'Loading�' : '? Refresh'}
+                        </button>
+                      </div>
+
+                      {forumsError && <div className="alert-danger" style={{ marginBottom: '0.75rem', fontSize: '0.88rem' }}>{forumsError}</div>}
+
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: '#eff6ff', border: '1px solid #1e3a8a20' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e3a8a', lineHeight: 1 }}>{forumThreads.length}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>Total Threads</div>
+                        </div>
+                        <div style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: '#f5f3ff', border: '1px solid #7c3aed20' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#7c3aed', lineHeight: 1 }}>{forumThreads.filter(t => t.pinned).length}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>Pinned</div>
+                        </div>
+                        <div style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: '#fef9c3', border: '1px solid #d9770620' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#d97706', lineHeight: 1 }}>{forumThreads.filter(t => t.closed).length}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>Closed</div>
+                        </div>
+                      </div>
+
+                      {/* New category form */}
+                      <form onSubmit={createForumCategory} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+                        <h3 style={{ marginBottom: '0.75rem', color: '#1e3a8a', fontSize: '0.92rem' }}>? New Category</h3>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <div className="form-group" style={{ flex: 1, minWidth: '160px', marginBottom: 0 }}>
+                            <input type="text" value={newForumCategory.name} onChange={e => setNewForumCategory(p => ({ ...p, name: e.target.value }))} placeholder="Category name *" required />
+                          </div>
+                          <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
+                            <input type="text" value={newForumCategory.description} onChange={e => setNewForumCategory(p => ({ ...p, description: e.target.value }))} placeholder="Description *" required />
+                          </div>
+                          <button type="submit" className="btn btn-primary btn-small" style={{ alignSelf: 'flex-end' }}>Create</button>
+                        </div>
+                      </form>
+
+                      {/* Threads table */}
+                      <h3 style={{ marginBottom: '0.65rem', color: '#1e3a8a', fontWeight: 700, fontSize: '0.92rem' }}>Discussion Threads ({forumThreads.length})</h3>
+                      {forumsLoading ? (
+                        <p className="text-muted">Loading forums�</p>
+                      ) : forumThreads.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: '10px' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>??</div>
+                          <div style={{ fontWeight: 600 }}>No threads yet.</div>
+                        </div>
+                      ) : (
+                        <div className="table-responsive">
+                          <table className="admin-table">
+                            <thead>
+                              <tr>
+                                <th>Title</th>
+                                <th>Category</th>
+                                <th>Author</th>
+                                <th>Posts</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {forumThreads.map(thread => (
+                                <tr key={thread.id}>
+                                  <td><strong style={{ fontSize: '0.88rem' }}>{thread.title}</strong></td>
+                                  <td><span className="badge" style={{ fontSize: '0.72rem' }}>{thread.category_name || '�'}</span></td>
+                                  <td style={{ fontSize: '0.84rem' }}>{thread.author_name || 'Anonymous'}</td>
+                                  <td style={{ fontSize: '0.84rem' }}>{thread.post_count ?? 0}</td>
+                                  <td>
+                                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                                      {thread.pinned && <span style={{ padding: '0.15rem 0.45rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: '#f5f3ff', color: '#7c3aed' }}>?? Pinned</span>}
+                                      {thread.closed && <span style={{ padding: '0.15rem 0.45rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: '#fef9c3', color: '#d97706' }}>?? Closed</span>}
+                                      {!thread.pinned && !thread.closed && <span style={{ padding: '0.15rem 0.45rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600, background: '#ecfdf5', color: '#059669' }}>Open</span>}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                      <button onClick={() => updateForumThreadState(thread, { pinned: !thread.pinned })} className="btn btn-small btn-outline" style={{ fontSize: '0.75rem' }}>
+                                        {thread.pinned ? 'Unpin' : '?? Pin'}
+                                      </button>
+                                      <button onClick={() => updateForumThreadState(thread, { closed: !thread.closed })} className="btn btn-small btn-outline" style={{ fontSize: '0.75rem', color: thread.closed ? '#059669' : '#d97706' }}>
+                                        {thread.closed ? 'Reopen' : '?? Close'}
+                                      </button>
+                                      <button onClick={() => removeForumThread(thread.id)} className="btn btn-small btn-outline" style={{ color: '#dc2626', fontSize: '0.75rem' }}>??</button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {/* Admin Audit Trail */}
                   {activeAdminTab === 'admin-audit' && (
                     <div className="admin-tab-content active">
-                      <div className="flex justify-between items-center">
-                        <h2>Admin Audit Trail</h2>
-                        <button
-                          onClick={() => fetchAdminAuditLogs()}
-                          className="btn btn-outline btn-small"
-                          disabled={adminAuditLoading}
-                        >
-                          {adminAuditLoading ? 'Refreshing...' : 'Refresh Logs'}
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div>
+                          <h2 style={{ marginBottom: '0.2rem' }}>Audit Trail</h2>
+                          <p className="text-muted" style={{ margin: 0, fontSize: '0.88rem' }}>Track all staff actions across managed resources for accountability.</p>
+                        </div>
+                        <button onClick={() => fetchAdminAuditLogs()} className="btn btn-outline btn-small" disabled={adminAuditLoading}>
+                          {adminAuditLoading ? '? Loading�' : '? Refresh Logs'}
                         </button>
                       </div>
-                      <p className="text-muted">Track staff actions across managed resources for accountability and troubleshooting.</p>
 
-                      <div className="card margin-top-2" style={{ padding: '1rem' }}>
-                        <div className="grid grid-2 gap-2">
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label>Action Filter</label>
-                            <select
-                              value={adminAuditActionFilter}
-                              onChange={(e) => setAdminAuditActionFilter(e.target.value as AdminAuditActionFilter)}
-                            >
-                              <option value="all">All</option>
-                              <option value="create">Create</option>
-                              <option value="update">Update</option>
-                              <option value="delete">Delete</option>
-                            </select>
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total Entries', value: adminAuditEntries.length, color: '#1e3a8a', bg: '#eff6ff' },
+                          { label: 'Creates', value: adminAuditEntries.filter(e => e.action === 'create').length, color: '#059669', bg: '#ecfdf5' },
+                          { label: 'Updates', value: adminAuditEntries.filter(e => e.action === 'update').length, color: '#0891b2', bg: '#ecfeff' },
+                          { label: 'Deletes', value: adminAuditEntries.filter(e => e.action === 'delete').length, color: '#dc2626', bg: '#fef2f2' },
+                        ].map(({ label, value, color, bg }) => (
+                          <div key={label} style={{ padding: '0.75rem 1.1rem', borderRadius: '10px', background: bg, border: `1px solid ${color}20`, minWidth: '110px' }}>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginTop: '0.2rem' }}>{label}</div>
                           </div>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label>Resource Type</label>
-                            <input
-                              type="text"
-                              value={adminAuditResourceFilter}
-                              onChange={(e) => setAdminAuditResourceFilter(e.target.value)}
-                              placeholder="e.g. Sermon, Project, HymnBook"
+                        ))}
+                      </div>
+
+                      {/* Filters */}
+                      <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                          <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                            {(['all', 'create', 'update', 'delete'] as AdminAuditActionFilter[]).map(f => (
+                              <button key={f} onClick={() => setAdminAuditActionFilter(f)} style={{
+                                padding: '0.3rem 0.65rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                                border: `1px solid ${adminAuditActionFilter === f ? '#1e3a8a' : '#e5e7eb'}`,
+                                background: adminAuditActionFilter === f ? '#1e3a8a' : '#fff',
+                                color: adminAuditActionFilter === f ? '#fff' : '#374151',
+                              }}>
+                                {f === 'all' ? 'All Actions' : f.charAt(0).toUpperCase() + f.slice(1)}
+                              </button>
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginLeft: 'auto' }}>
+                            <input type="text" value={adminAuditResourceFilter} onChange={e => setAdminAuditResourceFilter(e.target.value)}
+                              placeholder="Filter by resource type�"
+                              style={{ height: '34px', padding: '0 0.75rem', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem', width: '200px' }}
                             />
+                            <button onClick={() => fetchAdminAuditLogs(adminAuditActionFilter, adminAuditResourceFilter)} className="btn btn-primary btn-small" disabled={adminAuditLoading}>
+                              Apply
+                            </button>
                           </div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.8rem' }}>
-                          <button
-                            className="btn btn-accent btn-small"
-                            onClick={() => fetchAdminAuditLogs(adminAuditActionFilter, adminAuditResourceFilter)}
-                            disabled={adminAuditLoading}
-                          >
-                            Apply Filters
-                          </button>
                         </div>
                       </div>
 
                       {adminAuditError && (
-                        <div className="alert-danger margin-top-1" style={{ marginBottom: '1rem', fontSize: '0.88rem' }}>
-                          {adminAuditError}
-                        </div>
+                        <div className="alert-danger" style={{ marginBottom: '1rem', fontSize: '0.88rem' }}>{adminAuditError}</div>
                       )}
 
-                      <div className="table-responsive margin-top-2">
+                      {/* Table */}
+                      <div className="table-responsive">
                         <table className="admin-table">
                           <thead>
                             <tr>
@@ -8045,19 +10749,31 @@ export default function App({ entryMode }: AppProps = {}) {
                           </thead>
                           <tbody>
                             {adminAuditLoading ? (
-                              <tr><td colSpan={5} className="text-center">Loading audit logs...</td></tr>
+                              <tr><td colSpan={5} className="text-center" style={{ padding: '2rem', color: '#9ca3af' }}>Loading audit logs�</td></tr>
                             ) : adminAuditEntries.length === 0 ? (
-                              <tr><td colSpan={5} className="text-center">No audit entries found for current filters.</td></tr>
+                              <tr><td colSpan={5} className="text-center" style={{ padding: '2rem', color: '#9ca3af' }}>No audit entries found for current filters.</td></tr>
                             ) : (
-                              adminAuditEntries.map((entry) => (
-                                <tr key={entry.id}>
-                                  <td>{new Date(entry.created_at).toLocaleString()}</td>
-                                  <td>{entry.actor_username || 'System'}</td>
-                                  <td><span className="badge">{entry.action.toUpperCase()}</span></td>
-                                  <td>{entry.resource_type} #{entry.resource_id || '-'}</td>
-                                  <td>{entry.resource_label || '-'}</td>
-                                </tr>
-                              ))
+                              adminAuditEntries.map(entry => {
+                                const ACTION_STYLE: Record<string, { bg: string; color: string }> = {
+                                  create: { bg: '#ecfdf5', color: '#059669' },
+                                  update: { bg: '#ecfeff', color: '#0891b2' },
+                                  delete: { bg: '#fef2f2', color: '#dc2626' },
+                                };
+                                const style = ACTION_STYLE[entry.action] ?? { bg: '#f3f4f6', color: '#6b7280' };
+                                return (
+                                  <tr key={entry.id}>
+                                    <td style={{ fontSize: '0.82rem', color: '#6b7280', whiteSpace: 'nowrap' }}>{new Date(entry.created_at).toLocaleString()}</td>
+                                    <td style={{ fontWeight: 600, fontSize: '0.85rem' }}>{entry.actor_username || 'System'}</td>
+                                    <td>
+                                      <span style={{ padding: '0.2rem 0.55rem', borderRadius: '20px', fontSize: '0.72rem', fontWeight: 700, background: style.bg, color: style.color }}>
+                                        {entry.action.toUpperCase()}
+                                      </span>
+                                    </td>
+                                    <td style={{ fontSize: '0.84rem' }}>{entry.resource_type} <span style={{ color: '#9ca3af' }}>#{entry.resource_id || '�'}</span></td>
+                                    <td style={{ fontSize: '0.84rem', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.resource_label || '�'}</td>
+                                  </tr>
+                                );
+                              })
                             )}
                           </tbody>
                         </table>
@@ -8077,7 +10793,7 @@ export default function App({ entryMode }: AppProps = {}) {
       </main>
 
       {/* Footer */}
-      {!isAdminEntry && (
+      {!IS_ADMIN_ENTRY && (
       <footer className="main-footer">
         <div className="container footer-grid grid grid-3 gap-3">
           <div>
@@ -8328,6 +11044,20 @@ export default function App({ entryMode }: AppProps = {}) {
                   <option value="Evangelistic Series">Evangelistic Series</option>
                   <option value="Bible Studies">Bible Studies</option>
                 </select>
+              </div>
+              <div className="form-group">
+                <label>YouTube Video ID <span style={{ color: '#9ca3af', fontWeight: 400, fontSize: '0.85rem' }}>(optional � for Watch Online button)</span></label>
+                <input
+                  type="text"
+                  value={addSermonForm.youtube_id || ''}
+                  onChange={(e) => setAddSermonForm({ ...addSermonForm, youtube_id: e.target.value })}
+                  placeholder="e.g. dQw4w9WgXcQ (from youtube.com/watch?v=...)"
+                />
+                {addSermonForm.youtube_id ? (
+                  <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: '#059669' }}>
+                    Link: <a href={'https://youtube.com/watch?v=' + addSermonForm.youtube_id} target="_blank" rel="noopener noreferrer">{'https://youtube.com/watch?v=' + addSermonForm.youtube_id}</a>
+                  </div>
+                ) : null}
               </div>
               <button type="submit" className="btn btn-accent btn-block">Add Sermon</button>
             </form>

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { Toaster, toast } from 'react-hot-toast';
 import { Users, GraduationCap, Music, Map as MapIcon, Heart, HandHelping, LogOut, User, BookOpen, Calendar, MessageSquare, Award, Search, X, ChevronDown, Eye, EyeOff } from 'lucide-react';
@@ -95,6 +94,12 @@ interface ChurchEvent {
   date: string;
   location: string;
   desc: string;
+  category?: string;
+  capacity?: number | null;
+  waitlist_enabled?: boolean;
+  attendee_count?: number;
+  waitlist_count?: number;
+  seats_remaining?: number | null;
 }
 
 interface BibleStudy {
@@ -317,249 +322,21 @@ type SabbathProgrammeForm = {
   theme: string;
   sabbathSchoolTime: string;
   superintendent: string;
-  assistantSuperintendent: string;
-  secretary: string;
-  sabbathSchoolSongLeader: string;
-  sabbathSchoolOpeningPrayer: string;
   lessonTitle: string;
   lessonNumber: number;
-  quarter: string;
-  memoryVerse: string;
-  memoryVerseRef: string;
-  discussionLeader: string;
-  lessonLeader: string;
-  missionSpotlight: string;
-  offeringDesignation: string;
-  openingSongs: string;
-  dailyReadings: string;
-  classes: string;
   divineServiceTime: string;
-  divineSongLeader: string;
-  divineOpeningPrayer: string;
-  organist: string;
-  worshipCoordinator: string;
-  tithesOffering: string;
-  welcomeAndAnnouncements: string;
+  songLeader: string;
+  openingPrayer: string;
   sermonPreacher: string;
   sermonTitle: string;
   sermonKeyText: string;
   sermonSynopsis: string;
   sermonRole: string;
-  hymns: string;
-  specialItems: string;
   closingPrayer: string;
   benediction: string;
   afternoonTime: string;
   afternoonLeader: string;
-  afternoonPrayerFocus: string;
-  afternoonPrayerPoints: string;
-  discussionTopic: string;
-  discussionText: string;
-  afternoonDiscussionLeader: string;
-  discussionSummary: string;
 };
-
-type StructuredEditorColumn = {
-  key: string;
-  label: string;
-  placeholder?: string;
-};
-
-type StructuredEditorRow = Record<string, string>;
-
-const parseStructuredLines = (value: string) =>
-  value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-const buildStructuredRow = (columns: StructuredEditorColumn[]) =>
-  columns.reduce<StructuredEditorRow>((accumulator, column) => {
-    accumulator[column.key] = '';
-    return accumulator;
-  }, {});
-
-const StructuredRowsEditor = ({
-  columns,
-  value,
-  onChange,
-  parseRows,
-  serializeRows,
-  addLabel,
-  helperText,
-  disabled = false,
-}: {
-  columns: StructuredEditorColumn[];
-  value: string;
-  onChange: (value: string) => void;
-  parseRows: (value: string) => StructuredEditorRow[];
-  serializeRows: (rows: StructuredEditorRow[]) => string;
-  addLabel: string;
-  helperText?: string;
-  disabled?: boolean;
-}) => {
-  const parsedRows = parseRows(value);
-  const rows = parsedRows.length > 0 ? parsedRows : [buildStructuredRow(columns)];
-
-  const updateRow = (rowIndex: number, key: string, nextValue: string) => {
-    const nextRows = rows.map((row, index) =>
-      index === rowIndex ? { ...row, [key]: nextValue } : row
-    );
-    onChange(serializeRows(nextRows));
-  };
-
-  const addRow = () => {
-    onChange(serializeRows([...rows, buildStructuredRow(columns)]));
-  };
-
-  const removeRow = (rowIndex: number) => {
-    const nextRows = rows.filter((_, index) => index !== rowIndex);
-    onChange(serializeRows(nextRows.length > 0 ? nextRows : [buildStructuredRow(columns)]));
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      {rows.map((row, rowIndex) => (
-        <div key={rowIndex} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '0.85rem', background: '#fafafa' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`, gap: '0.75rem' }}>
-            {columns.map((column) => (
-              <div key={column.key} className="form-group" style={{ marginBottom: 0 }}>
-                <label style={{ fontSize: '0.78rem' }}>{column.label}</label>
-                <input
-                  type="text"
-                  value={row[column.key] || ''}
-                  onChange={(event) => updateRow(rowIndex, column.key, event.target.value)}
-                  placeholder={column.placeholder}
-                  disabled={disabled}
-                />
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Row {rowIndex + 1}</span>
-            <button
-              type="button"
-              className="btn btn-outline btn-small"
-              onClick={() => removeRow(rowIndex)}
-              disabled={disabled || rows.length === 1}
-            >
-              Remove Row
-            </button>
-          </div>
-        </div>
-      ))}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <button type="button" className="btn btn-outline btn-small" onClick={addRow} disabled={disabled}>
-          {addLabel}
-        </button>
-        {helperText && <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{helperText}</span>}
-      </div>
-    </div>
-  );
-};
-
-const formatOpeningSongs = (songs: { number: string; title: string }[]) =>
-  songs.map((song) => `${song.number} | ${song.title}`).join('\n');
-
-const parseOpeningSongs = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [number, ...titleParts] = line.split('|');
-    return {
-      number: (number || '').trim(),
-      title: titleParts.join('|').trim(),
-    };
-  }).filter((item) => item.number || item.title);
-
-const formatDailyReadings = (items: { day: string; title: string; text: string }[]) =>
-  items.map((item) => `${item.day} | ${item.title} | ${item.text}`).join('\n');
-
-const parseDailyReadings = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [day, title, ...textParts] = line.split('|');
-    return {
-      day: (day || '').trim(),
-      title: (title || '').trim(),
-      text: textParts.join('|').trim(),
-    };
-  }).filter((item) => item.day || item.title || item.text);
-
-const formatClasses = (items: { name: string; ageRange: string; teacher: string; room: string }[]) =>
-  items.map((item) => `${item.name} | ${item.ageRange} | ${item.teacher} | ${item.room}`).join('\n');
-
-const parseClasses = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [name, ageRange, teacher, ...roomParts] = line.split('|');
-    return {
-      name: (name || '').trim(),
-      ageRange: (ageRange || '').trim(),
-      teacher: (teacher || '').trim(),
-      room: roomParts.join('|').trim(),
-    };
-  }).filter((item) => item.name || item.ageRange || item.teacher || item.room);
-
-const formatHymns = (items: { number: string; title: string; book: string; moment: string }[]) =>
-  items.map((item) => `${item.number} | ${item.title} | ${item.book} | ${item.moment}`).join('\n');
-
-const parseHymns = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [number, title, book, ...momentParts] = line.split('|');
-    return {
-      number: (number || '').trim(),
-      title: (title || '').trim(),
-      book: (book || '').trim(),
-      moment: momentParts.join('|').trim(),
-    };
-  }).filter((item) => item.number || item.title || item.book || item.moment);
-
-const formatSpecialItems = (items: { group: string; song: string; type: string; color: string }[]) =>
-  items.map((item) => `${item.group} | ${item.song} | ${item.type} | ${item.color}`).join('\n');
-
-const parseSpecialItems = (value: string) =>
-  parseStructuredLines(value).map((line) => {
-    const [group, song, type, ...colorParts] = line.split('|');
-    return {
-      group: (group || '').trim(),
-      song: (song || '').trim(),
-      type: (type || '').trim(),
-      color: colorParts.join('|').trim() || '#8B5CF6',
-    };
-  }).filter((item) => item.group || item.song || item.type || item.color);
-
-const serializeOpeningSongRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.number || '').trim()} | ${(row.title || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeDailyReadingRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.day || '').trim()} | ${(row.title || '').trim()} | ${(row.text || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeClassRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.name || '').trim()} | ${(row.ageRange || '').trim()} | ${(row.teacher || '').trim()} | ${(row.room || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeHymnRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.number || '').trim()} | ${(row.title || '').trim()} | ${(row.book || '').trim()} | ${(row.moment || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeSpecialItemRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => `${(row.group || '').trim()} | ${(row.song || '').trim()} | ${(row.type || '').trim()} | ${(row.color || '').trim()}`)
-    .filter((line) => line.replace(/\|/g, '').trim())
-    .join('\n');
-
-const serializeSingleValueRows = (rows: StructuredEditorRow[]) =>
-  rows
-    .map((row) => (row.value || '').trim())
-    .filter(Boolean)
-    .join('\n');
 
 const applySabbathProgrammeForm = (base: SabbathProgram, form: SabbathProgrammeForm): SabbathProgram => ({
   ...base,
@@ -569,32 +346,14 @@ const applySabbathProgrammeForm = (base: SabbathProgram, form: SabbathProgrammeF
     ...base.sabbathSchool,
     time: form.sabbathSchoolTime,
     superintendent: form.superintendent,
-    assistantSuperintendent: form.assistantSuperintendent,
-    secretary: form.secretary,
-    songLeader: form.sabbathSchoolSongLeader,
-    openingPrayer: form.sabbathSchoolOpeningPrayer,
     lessonTitle: form.lessonTitle,
     lessonNumber: Number(form.lessonNumber) || 1,
-    quarter: form.quarter,
-    memoryVerse: form.memoryVerse,
-    memoryVerseRef: form.memoryVerseRef,
-    discussionLeader: form.discussionLeader,
-    lessonLeader: form.lessonLeader,
-    missionSpotlight: form.missionSpotlight,
-    offeringDesignation: form.offeringDesignation,
-    openingSongs: parseOpeningSongs(form.openingSongs),
-    dailyReadings: parseDailyReadings(form.dailyReadings),
-    classes: parseClasses(form.classes),
   },
   divineService: {
     ...base.divineService,
     time: form.divineServiceTime,
-    songLeader: form.divineSongLeader,
-    openingPrayer: form.divineOpeningPrayer,
-    organist: form.organist,
-    worshipCoordinator: form.worshipCoordinator,
-    tithesOffering: form.tithesOffering,
-    welcomeAndAnnouncements: form.welcomeAndAnnouncements,
+    songLeader: form.songLeader,
+    openingPrayer: form.openingPrayer,
   },
   sermon: {
     ...base.sermon,
@@ -604,20 +363,12 @@ const applySabbathProgrammeForm = (base: SabbathProgram, form: SabbathProgrammeF
     synopsis: form.sermonSynopsis,
     role: form.sermonRole,
   },
-  hymns: parseHymns(form.hymns),
-  specialItems: parseSpecialItems(form.specialItems),
   closingPrayer: form.closingPrayer,
   benediction: form.benediction,
   afternoonProgramme: {
     ...base.afternoonProgramme,
     time: form.afternoonTime,
     leader: form.afternoonLeader,
-    prayerFocus: form.afternoonPrayerFocus,
-    prayerPoints: parseStructuredLines(form.afternoonPrayerPoints),
-    discussionTopic: form.discussionTopic,
-    discussionText: form.discussionText,
-    discussionLeader: form.afternoonDiscussionLeader,
-    discussionSummary: form.discussionSummary,
   },
 });
 
@@ -626,46 +377,20 @@ const toSabbathProgrammeForm = (programme: SabbathProgram): SabbathProgrammeForm
   theme: programme.theme,
   sabbathSchoolTime: programme.sabbathSchool.time,
   superintendent: programme.sabbathSchool.superintendent,
-  assistantSuperintendent: programme.sabbathSchool.assistantSuperintendent,
-  secretary: programme.sabbathSchool.secretary,
-  sabbathSchoolSongLeader: programme.sabbathSchool.songLeader,
-  sabbathSchoolOpeningPrayer: programme.sabbathSchool.openingPrayer,
   lessonTitle: programme.sabbathSchool.lessonTitle,
   lessonNumber: programme.sabbathSchool.lessonNumber,
-  quarter: programme.sabbathSchool.quarter,
-  memoryVerse: programme.sabbathSchool.memoryVerse,
-  memoryVerseRef: programme.sabbathSchool.memoryVerseRef,
-  discussionLeader: programme.sabbathSchool.discussionLeader,
-  lessonLeader: programme.sabbathSchool.lessonLeader,
-  missionSpotlight: programme.sabbathSchool.missionSpotlight,
-  offeringDesignation: programme.sabbathSchool.offeringDesignation,
-  openingSongs: formatOpeningSongs(programme.sabbathSchool.openingSongs),
-  dailyReadings: formatDailyReadings(programme.sabbathSchool.dailyReadings),
-  classes: formatClasses(programme.sabbathSchool.classes),
   divineServiceTime: programme.divineService.time,
-  divineSongLeader: programme.divineService.songLeader,
-  divineOpeningPrayer: programme.divineService.openingPrayer,
-  organist: programme.divineService.organist,
-  worshipCoordinator: programme.divineService.worshipCoordinator,
-  tithesOffering: programme.divineService.tithesOffering,
-  welcomeAndAnnouncements: programme.divineService.welcomeAndAnnouncements,
+  songLeader: programme.divineService.songLeader,
+  openingPrayer: programme.divineService.openingPrayer,
   sermonPreacher: programme.sermon.preacher,
   sermonTitle: programme.sermon.title,
   sermonKeyText: programme.sermon.keyText,
   sermonSynopsis: programme.sermon.synopsis,
   sermonRole: programme.sermon.role,
-  hymns: formatHymns(programme.hymns),
-  specialItems: formatSpecialItems(programme.specialItems),
   closingPrayer: programme.closingPrayer,
   benediction: programme.benediction,
   afternoonTime: programme.afternoonProgramme.time,
   afternoonLeader: programme.afternoonProgramme.leader,
-  afternoonPrayerFocus: programme.afternoonProgramme.prayerFocus,
-  afternoonPrayerPoints: programme.afternoonProgramme.prayerPoints.join('\n'),
-  discussionTopic: programme.afternoonProgramme.discussionTopic,
-  discussionText: programme.afternoonProgramme.discussionText,
-  afternoonDiscussionLeader: programme.afternoonProgramme.discussionLeader,
-  discussionSummary: programme.afternoonProgramme.discussionSummary,
 });
 
 // --- Initial Fallback Mock Data ---
@@ -724,6 +449,23 @@ const DEFAULT_MINISTRIES = [
     icon: <HandHelping size={24} />
   }
 ];
+
+const MINISTRY_FOCUS_BY_ID: Record<string, 'students' | 'families' | 'worship' | 'care' | 'outreach'> = {
+  youth: 'students',
+  campus: 'outreach',
+  music: 'worship',
+  pathfinders: 'families',
+  women: 'care',
+  prayer: 'care',
+};
+
+const MINISTRY_FOCUS_LABELS: Record<'students' | 'families' | 'worship' | 'care' | 'outreach', string> = {
+  students: 'Students',
+  families: 'Families',
+  worship: 'Worship',
+  care: 'Care',
+  outreach: 'Outreach',
+};
 
 const DEFAULT_SERMONS: Sermon[] = [
   { id: 1, title: "The Sanctuary & The Sanctuary Guard", speaker: "Kagwa Rogers", date: "2026-07-11", passage: "Hebrews 8:1-5", category: "Sabbath Sermons" },
@@ -896,7 +638,7 @@ const LESSON_VIDEOS = [
   { week: 4, title: "Week 4: Judgment and the Most Holy Place", date: "2026-07-25", youtubeId: "", desc: "Understanding the Day of Atonement, the cleansing of the sanctuary, and the work of our High Priest." },
 ];
 
-const DEFAULT_ENTRY_IS_ADMIN = typeof window !== 'undefined' && /\/admin\.html$/i.test(window.location.pathname);
+const IS_ADMIN_ENTRY = false;
 
 const PUBLIC_ROUTE_WHITELIST = new Set([
   'home',
@@ -934,16 +676,11 @@ const ADMIN_ROUTE_WHITELIST = new Set([
   'admin',
 ]);
 
-type AppEntryMode = 'public' | 'admin';
 
-interface AppProps {
-  entryMode?: AppEntryMode;
-}
 
-export default function App({ entryMode }: AppProps = {}) {
-  const isAdminEntry = entryMode ? entryMode === 'admin' : DEFAULT_ENTRY_IS_ADMIN;
-  const routeWhitelist = isAdminEntry ? ADMIN_ROUTE_WHITELIST : PUBLIC_ROUTE_WHITELIST;
-  const [currentRoute, setCurrentRoute] = useState(isAdminEntry ? 'admin' : 'home');
+export default function PublicSiteApp() {
+  const routeWhitelist = IS_ADMIN_ENTRY ? ADMIN_ROUTE_WHITELIST : PUBLIC_ROUTE_WHITELIST;
+  const [currentRoute, setCurrentRoute] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileMenuSearch, setMobileMenuSearch] = useState('');
@@ -971,14 +708,19 @@ export default function App({ entryMode }: AppProps = {}) {
   const [dailyVerse, setDailyVerse] = useState(BIBLE_VERSES[0]);
   const [selectedSermonCat, setSelectedSermonCat] = useState('all');
   const [sermonSearchTerm, setSermonSearchTerm] = useState('');
+  const [ministrySearchTerm, setMinistrySearchTerm] = useState('');
+  const [ministryFocusFilter, setMinistryFocusFilter] = useState<'all' | 'students' | 'families' | 'worship' | 'care' | 'outreach'>('all');
   const [sermonPage, setSermonPage] = useState(1);
+  const [eventCategoryFilter] = useState('all');
+  const [eventLocationFilter] = useState('');
+  const [eventDateFromFilter] = useState('');
+  const [eventDateToFilter] = useState('');
   const [selectedGalleryAlbum, setSelectedGalleryAlbum] = useState('all');
-  const [gallery, setGallery] = useState<GalleryImage[]>([]);
+  const [gallery, setGallery] = useState<GalleryImage[]>(DEFAULT_GALLERY.map((item, index) => ({ id: String(index + 1), album: item.album, title: item.title, img_url: item.img })));
   const [galleryLoading, setGalleryLoading] = useState(false);
-  const [galleryCloudAvailable, setGalleryCloudAvailable] = useState(isSupabaseConfigured);
+  const [galleryCloudAvailable, setGalleryCloudAvailable] = useState(true);
   const [galleryUploadForm, setGalleryUploadForm] = useState({ title: '', album: 'Sabbath Worship' });
   const [galleryUploadFile, setGalleryUploadFile] = useState<File | null>(null);
-  const [galleryUploading, setGalleryUploading] = useState(false);
   const [selectedLessonWeek, setSelectedLessonWeek] = useState(3);
   const [lessonVideos, setLessonVideos] = useState<any[]>(LESSON_VIDEOS);
   const [addLessonForm, setAddLessonForm] = useState({ week: '', title: '', date: '', youtube_id: '', desc: '' });
@@ -1129,7 +871,15 @@ export default function App({ entryMode }: AppProps = {}) {
   const [donationDrafts, setDonationDrafts] = useState<Record<number, Donation>>({});
 
   // Form input states
-  const [addEventForm, setAddEventForm] = useState({ title: '', date: '', location: '', desc: '' });
+  const [addEventForm, setAddEventForm] = useState({
+    title: '',
+    date: '',
+    location: '',
+    category: 'General',
+    capacity: '',
+    waitlist_enabled: true,
+    desc: '',
+  });
   const [addSermonForm, setAddSermonForm] = useState({ title: '', speaker: '', date: '', passage: '', category: 'Sabbath Sermons' });
   const [studyForm, setStudyForm] = useState({
     name: '',
@@ -1220,8 +970,10 @@ export default function App({ entryMode }: AppProps = {}) {
 
   // Alerts
   const [studySuccess] = useState(false);
+  const [prayerSuccess] = useState(false);
   const [donationSuccess] = useState(false);
   const [eventRegSuccess] = useState(false);
+  const [contactSuccess] = useState(false);
 
   const studyNameLength = studyForm.name.trim().length;
   const studyCountryLength = studyForm.country.trim().length;
@@ -1244,7 +996,6 @@ export default function App({ entryMode }: AppProps = {}) {
   const isPrayerFormValid = prayerForm.content.trim().length >= 10
     && prayerForm.content.length <= 2000
     && (!prayerForm.name.trim() || prayerForm.name.trim().length <= 100);
-  const [contactSuccess] = useState(false);
 
   // Chat Feed Sim
   const [chatMessages, setChatMessages] = useState([
@@ -1345,7 +1096,7 @@ export default function App({ entryMode }: AppProps = {}) {
 
   useEffect(() => {
     const syncRouteFromHash = () => {
-      if (isAdminEntry) {
+      if (IS_ADMIN_ENTRY) {
         setCurrentRoute((prev) => (prev === 'admin' ? prev : 'admin'));
         if (window.location.hash.replace(/^#\/?/, '').trim().toLowerCase() !== 'admin') {
           window.history.replaceState(null, '', '#/admin');
@@ -1364,7 +1115,7 @@ export default function App({ entryMode }: AppProps = {}) {
   }, []);
 
   useEffect(() => {
-    if (isAdminEntry && currentRoute !== 'admin') {
+    if (IS_ADMIN_ENTRY && currentRoute !== 'admin') {
       setCurrentRoute('admin');
       return;
     }
@@ -1376,7 +1127,7 @@ export default function App({ entryMode }: AppProps = {}) {
   }, [currentRoute]);
 
   useEffect(() => {
-    if (isAdminEntry) {
+    if (IS_ADMIN_ENTRY) {
       if (window.location.hash.replace(/^#\/?/, '').trim().toLowerCase() !== 'admin') {
         window.history.replaceState(null, '', '#/admin');
       }
@@ -1410,6 +1161,18 @@ export default function App({ entryMode }: AppProps = {}) {
     fetchLessonVideos();
     fetchSabbathProgrammes();
     fetchAnnouncements();
+
+    // Poll projects every 3 seconds so admin edits appear almost instantly
+    const projectPoll = setInterval(() => fetchProjects(), 3000);
+
+    // Also refetch projects when the user switches back to this tab
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchProjects(); };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(projectPoll);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   // Pre-fill donation fund when navigating to Give from a project
@@ -1658,11 +1421,22 @@ export default function App({ entryMode }: AppProps = {}) {
     title: normalizeEditorialText(item.title),
     location: normalizeEditorialText(item.location),
     desc: normalizeEditorialText(item.desc),
+    category: normalizeEditorialText(item.category || 'General'),
+    capacity: item.capacity ?? null,
+    waitlist_enabled: item.waitlist_enabled !== false,
   });
 
   const openEventEditor = (item: ChurchEvent) => {
     setEditingEventId(item.id);
-    setAddEventForm({ title: item.title, date: item.date, location: item.location, desc: item.desc });
+    setAddEventForm({
+      title: item.title,
+      date: item.date,
+      location: item.location,
+      category: item.category || 'General',
+      capacity: item.capacity === null || item.capacity === undefined ? '' : String(item.capacity),
+      waitlist_enabled: item.waitlist_enabled !== false,
+      desc: item.desc,
+    });
     setShowAddEventModal(true);
   };
 
@@ -2143,26 +1917,26 @@ export default function App({ entryMode }: AppProps = {}) {
   };
 
   const fetchGallery = async () => {
-    if (!isSupabaseConfigured) {
-      setGalleryCloudAvailable(false);
-      setGalleryLoading(false);
-      return;
-    }
-
     setGalleryLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('gallery')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
-        setGalleryCloudAvailable(true);
-        setGallery(data as GalleryImage[]);
-      } else if (error) {
-        setGalleryCloudAvailable(false);
+      const res = await fetch(`${API_URL}/gallery/`);
+      if (!res.ok) {
+        throw new Error('Failed to fetch gallery images.');
       }
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      const mapped = list.length > 0 ? list.map((item: any) => ({
+        id: String(item.id),
+        album: item.album,
+        title: item.title,
+        img_url: item.img_url,
+        created_at: item.created_at,
+      })) : DEFAULT_GALLERY.map((item, index) => ({ id: String(index + 1), album: item.album, title: item.title, img_url: item.img }));
+      setGalleryCloudAvailable(true);
+      setGallery(mapped);
     } catch {
       setGalleryCloudAvailable(false);
+      setGallery(DEFAULT_GALLERY.map((item, index) => ({ id: String(index + 1), album: item.album, title: item.title, img_url: item.img })));
     } finally {
       setGalleryLoading(false);
     }
@@ -2206,40 +1980,8 @@ export default function App({ entryMode }: AppProps = {}) {
   const handleGalleryUpload = async (e: React.FormEvent) => {
 
     e.preventDefault();
-    if (!isSupabaseConfigured) {
-      toast.error('Gallery cloud is not configured. Add Supabase keys in frontend .env.');
-      return;
-    }
     if (!galleryUploadFile) { toast.error('Please select an image file.'); return; }
-    setGalleryUploading(true);
-    try {
-      const fileName = `${Date.now()}-${galleryUploadFile.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from('church-gallery')
-        .upload(fileName, galleryUploadFile, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage.from('church-gallery').getPublicUrl(fileName);
-      const publicUrl = urlData.publicUrl;
-
-      const { error: insertError } = await supabase
-        .from('gallery')
-        .insert([{ album: galleryUploadForm.album, title: galleryUploadForm.title, img_url: publicUrl }]);
-
-      if (insertError) throw insertError;
-
-      toast.success('Image uploaded to gallery successfully! 🎉');
-      setGalleryUploadForm({ title: '', album: 'Sabbath Worship' });
-      setGalleryUploadFile(null);
-      if (galleryFileRef.current) galleryFileRef.current.value = '';
-      fetchGallery();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Upload failed. Check your Supabase bucket permissions.';
-      toast.error(message);
-    } finally {
-      setGalleryUploading(false);
-    }
+    toast.error('Gallery uploads are now managed from the admin portal. Please add images there.');
   };
 
   // --- Submissions handlers ---
@@ -2551,7 +2293,16 @@ export default function App({ entryMode }: AppProps = {}) {
     try {
       const res = await fetch(`${API_URL}/events/${registeringEvent.id}/register/`, {
         method: 'POST',
-        headers: { Authorization: `Token ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Token ${token}`,
+        },
+        body: JSON.stringify({
+          name: eventRegForm.name.trim(),
+          email: eventRegForm.email.trim(),
+          phone: eventRegForm.phone.trim(),
+          notes: eventRegForm.notes.trim(),
+        }),
       });
 
       if (!res.ok) {
@@ -2561,9 +2312,19 @@ export default function App({ entryMode }: AppProps = {}) {
 
       const data = await res.json();
       const reference = data?.id ? `EVR-${String(data.id).padStart(4, '0')}` : `EVR-${Date.now()}`;
+      const alreadyRegistered = data?.already_registered === true;
+      const waitlisted = data?.waitlisted === true;
+      const waitlistPosition = typeof data?.waitlist_position === 'number' ? data.waitlist_position : null;
 
       triggerLog(`Registration received from ${eventRegForm.name} for event: ${registeringEvent.title}`);
-      toast.success(`Successfully registered. Ref: ${reference}`);
+      if (alreadyRegistered) {
+        toast.success(`You are already registered. Ref: ${reference}`);
+      } else if (waitlisted) {
+        const suffix = waitlistPosition ? ` Position #${waitlistPosition}.` : '';
+        toast.success(`Event is currently full. You have been added to the waitlist.${suffix} Ref: ${reference}`);
+      } else {
+        toast.success(`Successfully registered. Ref: ${reference}`);
+      }
       setEventReceipt({ eventTitle: registeringEvent.title, reference });
       setEventRegForm({ name: '', email: '', phone: '', notes: '' });
       setRegisteringEvent(null);
@@ -2583,13 +2344,27 @@ export default function App({ entryMode }: AppProps = {}) {
   // Add Event Action (Admin)
   const handleAdminAddEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { title, date, location, desc } = addEventForm;
+    const { title, date, location, category, capacity, waitlist_enabled, desc } = addEventForm;
+    const parsedCapacity = capacity.trim() === '' ? null : Number(capacity);
+    if (parsedCapacity !== null && (!Number.isFinite(parsedCapacity) || parsedCapacity <= 0)) {
+      toast.error('Event capacity must be empty or a positive number.');
+      return;
+    }
+
     try {
       const url = editingEventId ? `${API_URL}/events/${editingEventId}/` : `${API_URL}/events/`;
       const res = await fetch(url, {
         method: editingEventId ? 'PATCH' : 'POST',
         headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ title, date, location, desc })
+        body: JSON.stringify({
+          title,
+          date,
+          location,
+          category: category.trim() || 'General',
+          capacity: parsedCapacity,
+          waitlist_enabled,
+          desc,
+        })
       });
       if (res.ok) {
         fetchEvents();
@@ -2598,11 +2373,28 @@ export default function App({ entryMode }: AppProps = {}) {
       }
     } catch {
       const nextId = events.length > 0 ? Math.max(...events.map(ev => ev.id)) + 1 : 1;
-      setEvents(prev => [...prev, { id: nextId, title, date, location, desc }]);
+      setEvents(prev => [...prev, {
+        id: nextId,
+        title,
+        date,
+        location,
+        category: category.trim() || 'General',
+        capacity: parsedCapacity,
+        waitlist_enabled,
+        desc,
+      }]);
     }
     triggerLog(`Event "${title}" added to calendar.`);
     toast.success("Event added successfully!");
-    setAddEventForm({ title: '', date: '', location: '', desc: '' });
+    setAddEventForm({
+      title: '',
+      date: '',
+      location: '',
+      category: 'General',
+      capacity: '',
+      waitlist_enabled: true,
+      desc: '',
+    });
     setEditingEventId(null);
     setShowAddEventModal(false);
   };
@@ -2745,6 +2537,37 @@ export default function App({ entryMode }: AppProps = {}) {
       setEvents(prev => prev.filter(e => e.id !== id));
     }
     triggerLog(`Removed event ID: ${id}`);
+  };
+
+  const handleAdminExportEventAttendees = async (eventId?: number) => {
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      toast.error('Admin session is required to export attendees.');
+      return;
+    }
+
+    const query = eventId ? `?event_id=${eventId}` : '';
+    try {
+      const res = await fetch(`${API_URL}/events/attendees_export/${query}`, {
+        headers: { Authorization: `Token ${adminToken}` },
+      });
+      if (!res.ok) throw new Error();
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      const suffix = new Date().toISOString().slice(0, 10);
+      anchor.href = url;
+      anchor.download = eventId ? `event_${eventId}_attendees_${suffix}.csv` : `event_attendees_${suffix}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success(eventId ? 'Event attendees export downloaded.' : 'All event attendees export downloaded.');
+    } catch {
+      toast.error('Could not export attendees right now.');
+    }
   };
 
   const handleAdminDeleteSermon = async (id: number) => {
@@ -3190,6 +3013,18 @@ export default function App({ entryMode }: AppProps = {}) {
   });
 
   const featuredSermon = filteredSermons[0] || sermons[0] || null;
+
+  const filteredMinistries = DEFAULT_MINISTRIES.filter((item) => {
+    const focus = MINISTRY_FOCUS_BY_ID[item.id] || 'outreach';
+    const focusMatch = ministryFocusFilter === 'all' || focus === ministryFocusFilter;
+    const query = ministrySearchTerm.trim().toLowerCase();
+    const searchMatch =
+      query.length === 0 ||
+      item.title.toLowerCase().includes(query) ||
+      item.short.toLowerCase().includes(query) ||
+      item.desc.toLowerCase().includes(query);
+    return focusMatch && searchMatch;
+  });
   const sermonsPerPage = 6;
   const totalSermonPages = Math.max(1, Math.ceil(filteredSermons.length / sermonsPerPage));
   const paginatedSermons = filteredSermons.slice((sermonPage - 1) * sermonsPerPage, sermonPage * sermonsPerPage);
@@ -3197,6 +3032,7 @@ export default function App({ entryMode }: AppProps = {}) {
   const parsedEvents = (Array.isArray(events) ? events : DEFAULT_EVENTS).map((event) => ({
     ...event,
     parsedDate: new Date(event.date),
+    category: event.category || 'General',
   }));
   const now = new Date();
   const thisWeekEnd = new Date(now);
@@ -3204,8 +3040,26 @@ export default function App({ entryMode }: AppProps = {}) {
 
   const eventsThisWeek = parsedEvents.filter((e) => e.parsedDate >= now && e.parsedDate <= thisWeekEnd);
   const upcomingEvents = parsedEvents.filter((e) => e.parsedDate > thisWeekEnd);
-  const pastEvents = parsedEvents.filter((e) => e.parsedDate < now).sort((a, b) => b.parsedDate.getTime() - a.parsedDate.getTime());
   const thisSabbathEvent = eventsThisWeek[0] || upcomingEvents[0] || parsedEvents[0] || null;
+
+  const filteredParsedEvents = parsedEvents.filter((item) => {
+    const locationMatch =
+      eventLocationFilter.trim().length === 0 ||
+      item.location.toLowerCase().includes(eventLocationFilter.trim().toLowerCase());
+    const categoryMatch = eventCategoryFilter === 'all' || (item.category || 'General') === eventCategoryFilter;
+
+    const itemDateValue = item.date;
+    const fromMatch = eventDateFromFilter ? itemDateValue >= eventDateFromFilter : true;
+    const toMatch = eventDateToFilter ? itemDateValue <= eventDateToFilter : true;
+
+    return locationMatch && categoryMatch && fromMatch && toMatch;
+  });
+
+  const filteredEventsThisWeek = filteredParsedEvents.filter((e) => e.parsedDate >= now && e.parsedDate <= thisWeekEnd);
+  const filteredUpcomingEvents = filteredParsedEvents.filter((e) => e.parsedDate > thisWeekEnd);
+  const filteredPastEvents = filteredParsedEvents
+    .filter((e) => e.parsedDate < now)
+    .sort((a, b) => b.parsedDate.getTime() - a.parsedDate.getTime());
 
   const weeklyEssentialsDone = Object.values(weeklyEssentialsProgress).filter(Boolean).length;
   const weeklyEssentialsTotal = WEEKLY_ESSENTIALS.length;
@@ -3359,7 +3213,7 @@ export default function App({ entryMode }: AppProps = {}) {
     setSabbathProgrammeScope('full');
     setAdminLoginForm({ username: '', password: '' });
     setOpenProjectHistoryId(null);
-    setCurrentRoute(isAdminEntry ? 'admin' : 'home');
+    setCurrentRoute(IS_ADMIN_ENTRY ? 'admin' : 'home');
     localStorage.removeItem('admin_tabs');
     localStorage.removeItem('sabbath_programme_scope');
     fetchProjects();
@@ -3375,13 +3229,6 @@ export default function App({ entryMode }: AppProps = {}) {
       {/* Top Bar with Tagline & Social / Admin Link */}
       <div className="top-bar">
         <div className="container top-bar-content">
-          <span className="tagline">Growing in Christ • Serving the World • Sharing Hope</span>
-        </div>
-      </div>
-
-      {/* Header & Navigation */}
-      <header className="main-header">
-        <div className="container header-container">
           <a href="#home" onClick={() => setCurrentRoute('home')} className="logo-area">
             <div className="logo-icon">
               <svg width="40" height="40" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -3398,6 +3245,19 @@ export default function App({ entryMode }: AppProps = {}) {
               <span className="logo-sub">Church at Bugema University</span>
             </div>
           </a>
+
+          <div className="top-bar-right">
+            <button onClick={() => setCurrentRoute('contact')} className="top-bar-link">Find a Church</button>
+            <button onClick={() => setCurrentRoute('blog')} className="top-bar-link">News</button>
+            <button onClick={() => setMobileMenuOpen(true)} className="top-bar-link">Menu</button>
+            <button onClick={() => setMobileMenuOpen(true)} className="top-bar-link">Search</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Header & Navigation */}
+      <header className="main-header">
+        <div className="container header-container">
           <nav className={`nav-bar ${mobileMenuOpen ? 'active' : ''}`}>
             {/* Home */}
             <button
@@ -3652,80 +3512,13 @@ export default function App({ entryMode }: AppProps = {}) {
               )}
             </div>
 
-            {/* Give Button */}
-            <button 
-              onClick={() => { setCurrentRoute('give'); setMobileMenuOpen(false); setOpenDropdown(null); }} 
-              className="nav-link give-btn"
-              style={{ border: 'none', cursor: 'pointer', fontWeight: '700', background: 'linear-gradient(135deg, #D4AF37 0%, #C5A028 100%)', color: '#1E3A8A' }}
-            >
-              Give
-            </button>
-
-            {/* Watch Live Button */}
-            <button 
-              onClick={() => { setCurrentRoute('watch-live'); setMobileMenuOpen(false); setOpenDropdown(null); }} 
-              className="nav-link watch-live-btn"
-              style={{ border: 'none', cursor: 'pointer' }}
-            >
-              <span className="pulse-dot"></span>
-              Watch Live
-            </button>
-
-            {/* Auth & Language Controls */}
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginLeft: '1rem', borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '1rem' }}>
-              <LanguageSwitcher currentLanguage={language} onLanguageChange={(lang) => { setLanguage(lang); localStorage.setItem('language', lang); }} />
-              
-              {isLoggedIn ? (
-                <>
-                  <button
-                    onClick={() => setCurrentRoute('dashboard')}
-                    className="nav-link"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                  >
-                    <User size={18} />
-                    Dashboard
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsLoggedIn(false);
-                      localStorage.removeItem('user_token');
-                      localStorage.removeItem('user_email');
-                      setCurrentRoute('home');
-                      toast.success('Logged out successfully');
-                    }}
-                    className="nav-link"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                  >
-                    <LogOut size={18} />
-                    Logout
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => { setAuthMode('login'); setShowAuthModal(true); }}
-                    className="nav-link"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    Login
-                  </button>
-                  <button
-                    onClick={() => { setAuthMode('register'); setShowAuthModal(true); }}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      background: '#d4a574',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Register
-                  </button>
-                </>
-              )}
-            </div>
           </nav>
+          <button
+            onClick={() => { setCurrentRoute('bible-study'); setMobileMenuOpen(false); setOpenDropdown(null); }}
+            className="study-bible-btn"
+          >
+            Study the Bible
+          </button>
           <button
             className={`mobile-nav-toggle ${mobileMenuOpen ? 'active' : ''}`}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -4398,16 +4191,70 @@ export default function App({ entryMode }: AppProps = {}) {
 
             <div className="section-padding">
               <div className="container">
+                <section className="card ministries-discovery-card" style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <h3 style={{ marginBottom: 0 }}>Find Your Ministry</h3>
+                    {(ministrySearchTerm || ministryFocusFilter !== 'all') && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-small"
+                        onClick={() => {
+                          setMinistrySearchTerm('');
+                          setMinistryFocusFilter('all');
+                        }}
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="ministries-toolbar">
+                    <div className="ministries-search-wrap">
+                      <Search size={18} />
+                      <input
+                        type="search"
+                        value={ministrySearchTerm}
+                        onChange={(e) => setMinistrySearchTerm(e.target.value)}
+                        placeholder="Search by ministry name or focus"
+                        aria-label="Search ministries"
+                      />
+                    </div>
+
+                    <div className="ministries-filter-pills">
+                      {(['all', 'students', 'families', 'worship', 'care', 'outreach'] as const).map((focus) => (
+                        <button
+                          key={focus}
+                          type="button"
+                          onClick={() => setMinistryFocusFilter(focus)}
+                          className={`ministries-filter-pill ${ministryFocusFilter === focus ? 'active' : ''}`}
+                        >
+                          {focus === 'all' ? 'All' : MINISTRY_FOCUS_LABELS[focus]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
                 <motion.div className="grid grid-3 gap-3" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
-                  {DEFAULT_MINISTRIES.map(m => (
-                    <motion.div key={m.id} className="card student-card" style={{ cursor: 'pointer' }} onClick={() => setSelectedMinistry(m)} variants={staggerItem} whileHover={{ y: -6, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.12)', borderTopColor: 'var(--primary)' }}>
-                      <div className="student-icon">{m.icon}</div>
-                      <h3>{m.title}</h3>
-                      <p>{m.short}</p>
-                      <span className="card-link text-gold">Learn More &arr;</span>
-                    </motion.div>
-                  ))}
+                  {filteredMinistries.map((m) => {
+                    const focus = MINISTRY_FOCUS_BY_ID[m.id] || 'outreach';
+                    return (
+                      <motion.div key={m.id} className="card student-card" style={{ cursor: 'pointer' }} onClick={() => setSelectedMinistry(m)} variants={staggerItem} whileHover={{ y: -6, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.12)', borderTopColor: 'var(--primary)' }}>
+                        <div className="student-icon">{m.icon}</div>
+                        <h3>{m.title}</h3>
+                        <p>{m.short}</p>
+                        <span className="badge" style={{ marginTop: '0.2rem' }}>{MINISTRY_FOCUS_LABELS[focus]}</span>
+                        <span className="card-link text-gold">Learn More &arr;</span>
+                      </motion.div>
+                    );
+                  })}
                 </motion.div>
+
+                {filteredMinistries.length === 0 && (
+                  <div className="card margin-top-2" style={{ textAlign: 'center' }}>
+                    No ministries matched your search. Try a different keyword or focus.
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -4515,17 +4362,28 @@ export default function App({ entryMode }: AppProps = {}) {
               <div className="container">
                 <section>
                   <h2 style={{ marginBottom: '0.75rem' }}>This Week</h2>
-                  {eventsThisWeek.length === 0 ? (
+                  {filteredEventsThisWeek.length === 0 ? (
                     <div className="card" style={{ color: 'var(--text-muted)' }}>No events scheduled in the next 7 days.</div>
                   ) : (
                     <motion.div className="grid grid-2 gap-4" variants={staggerContainer} initial="hidden" animate="visible">
-                      {eventsThisWeek.map(e => (
+                      {filteredEventsThisWeek.map(e => (
                         <motion.div key={e.id} className="card event-card" variants={staggerItem} whileHover={{ y: -5 }}>
                           <div className="event-banner-placeholder">
                             {e.title}
                             <span className="event-date-badge">{e.date}</span>
                           </div>
                           <h3>{e.title}</h3>
+                          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.55rem' }}>
+                            <span className="badge" style={{ backgroundColor: 'var(--accent-light)', color: 'var(--text-primary)' }}>{e.category || 'General'}</span>
+                            {e.capacity !== null && e.capacity !== undefined && (
+                              <span className="badge" style={{ backgroundColor: '#E2E8F0', color: '#334155' }}>
+                                {e.seats_remaining === 0 ? 'Full' : `${e.seats_remaining ?? e.capacity} seats left`}
+                              </span>
+                            )}
+                            {e.waitlist_enabled === true && e.seats_remaining === 0 && (
+                              <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>Waitlist Open</span>
+                            )}
+                          </div>
                           <p className="text-muted font-size-sm">Venue: <strong>{e.location}</strong></p>
                           <p className="margin-top-1">{e.desc}</p>
                           <motion.button onClick={() => setRegisteringEvent(e)} className="btn btn-accent btn-small margin-top-2" whileTap={{ scale: 0.97 }}>Register for Event</motion.button>
@@ -4537,17 +4395,28 @@ export default function App({ entryMode }: AppProps = {}) {
 
                 <section className="margin-top-4">
                   <h2 style={{ marginBottom: '0.75rem' }}>Upcoming</h2>
-                  {upcomingEvents.length === 0 ? (
+                  {filteredUpcomingEvents.length === 0 ? (
                     <div className="card" style={{ color: 'var(--text-muted)' }}>No additional upcoming events right now.</div>
                   ) : (
                     <motion.div className="grid grid-2 gap-4" variants={staggerContainer} initial="hidden" animate="visible">
-                      {upcomingEvents.map(e => (
+                      {filteredUpcomingEvents.map(e => (
                         <motion.div key={e.id} className="card event-card" variants={staggerItem} whileHover={{ y: -5 }}>
                           <div className="event-banner-placeholder">
                             {e.title}
                             <span className="event-date-badge">{e.date}</span>
                           </div>
                           <h3>{e.title}</h3>
+                          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.55rem' }}>
+                            <span className="badge" style={{ backgroundColor: 'var(--accent-light)', color: 'var(--text-primary)' }}>{e.category || 'General'}</span>
+                            {e.capacity !== null && e.capacity !== undefined && (
+                              <span className="badge" style={{ backgroundColor: '#E2E8F0', color: '#334155' }}>
+                                {e.seats_remaining === 0 ? 'Full' : `${e.seats_remaining ?? e.capacity} seats left`}
+                              </span>
+                            )}
+                            {e.waitlist_enabled === true && e.seats_remaining === 0 && (
+                              <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>Waitlist Open</span>
+                            )}
+                          </div>
                           <p className="text-muted font-size-sm">Venue: <strong>{e.location}</strong></p>
                           <p className="margin-top-1">{e.desc}</p>
                           <motion.button onClick={() => setRegisteringEvent(e)} className="btn btn-accent btn-small margin-top-2" whileTap={{ scale: 0.97 }}>Register for Event</motion.button>
@@ -4557,11 +4426,11 @@ export default function App({ entryMode }: AppProps = {}) {
                   )}
                 </section>
 
-                {pastEvents.length > 0 && (
+                {filteredPastEvents.length > 0 && (
                   <section className="margin-top-4">
                     <h2 style={{ marginBottom: '0.75rem' }}>Past Highlights</h2>
                     <div className="grid grid-2 gap-3">
-                      {pastEvents.slice(0, 4).map((e) => (
+                      {filteredPastEvents.slice(0, 4).map((e) => (
                         <div key={e.id} className="card">
                           <h3 style={{ marginBottom: '0.3rem' }}>{e.title}</h3>
                           <p className="text-muted" style={{ marginBottom: '0.35rem' }}>{e.date} • {e.location}</p>
@@ -4586,7 +4455,12 @@ export default function App({ entryMode }: AppProps = {}) {
         {/* ================= GO BACK TO SCHOOL VIEW ================= */}
         {currentRoute === 'go-back-to-school' && (
           <motion.div key="go-back-to-school" variants={pageTransition} initial="hidden" animate="visible" exit="exit">
-            <GoBackToSchool />
+            <GoBackToSchool
+              onSelectDonationOption={() => {
+                setSelectedProjectFund('Mission Fund');
+                setCurrentRoute('give');
+              }}
+            />
           </motion.div>
         )}
 
@@ -4994,9 +4868,11 @@ export default function App({ entryMode }: AppProps = {}) {
             <div className="section-padding">
               <div className="container max-width-600 card" style={{ maxWidth: '600px', margin: '0 auto' }}>
                 <h2 className="section-title text-center">Submit a Prayer Request</h2>
+                <p className="text-center text-muted">Your request will be delivered to our pastors and elders. If checked confidential, only the pastors will receive it.</p>
+                
                 <motion.div className="card" style={{ backgroundColor: 'rgba(212, 175, 55, 0.08)', border: '1px solid rgba(212, 175, 55, 0.2)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }} variants={fadeIn} initial="hidden" animate="visible">
                   <p className="text-center" style={{ margin: '0', fontSize: '0.95rem', color: 'var(--text-color)' }}>
-                    <strong>🔒 Your privacy matters:</strong> Delivered to pastors/elders. Mark confidential to limit to pastoral team only.
+                    <strong>🔒 Your privacy matters:</strong> Your request will be delivered to our pastors and elders. If you mark it as confidential, only the pastoral team will see it—never shared publicly.
                   </p>
                 </motion.div>
                 
@@ -5032,7 +4908,7 @@ export default function App({ entryMode }: AppProps = {}) {
                       style={prayerFormErrors.content ? { borderColor: '#d32f2f', boxShadow: '0 0 0 3px rgba(211, 47, 47, 0.1)' } : {}}
                     />
                     {prayerFormErrors.content && <span style={{ color: '#d32f2f', fontSize: '0.85rem', marginTop: '0.25rem', display: 'block' }}>❌ {prayerFormErrors.content}</span>}
-                    <span style={{ display: 'block', marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Be as detailed or brief as you're comfortable.</span>
+                    <span style={{ display: 'block', marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Share as much or as little as you're comfortable with.</span>
                   </div>
                   <div className="form-group checkbox-group">
                     <input 
@@ -5041,7 +4917,7 @@ export default function App({ entryMode }: AppProps = {}) {
                       checked={prayerForm.confidential} 
                       onChange={(e) => setPrayerForm({ ...prayerForm, confidential: e.target.checked })} 
                     />
-                    <label htmlFor="prayer-check" style={{ marginBottom: '0' }}>🔐 Keep strictly confidential (pastoral team only)</label>
+                    <label htmlFor="prayer-check" style={{ marginBottom: '0' }}>🔐 Keep this request strictly confidential (Pastors only, never shared publicly)</label>
                   </div>
                   <div className="form-group">
                     <label>Would you like pastoral care follow-up?</label>
@@ -5055,7 +4931,7 @@ export default function App({ entryMode }: AppProps = {}) {
                       <option value="counseling">Counseling support</option>
                       <option value="prayer_partner">Connect me with a prayer partner</option>
                     </select>
-                    <span style={{ display: 'block', marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Optional follow-up from our pastoral team.</span>
+                    <span style={{ display: 'block', marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Our pastoral team can follow up to provide additional support and encouragement.</span>
                   </div>
                   <button 
                     type="submit" 
@@ -5066,6 +4942,12 @@ export default function App({ entryMode }: AppProps = {}) {
                     {prayerSubmitting ? '✨ Submitting your request...' : '🙏 Submit Prayer Request'}
                   </button>
                 </form>
+
+                {prayerSuccess && (
+                  <motion.div className="alert alert-success margin-top-2" variants={fadeIn} initial="hidden" animate="visible">
+                    Your request has been submitted. Rest assured, our team will be praying for you.
+                  </motion.div>
+                )}
               </div>
             </div>
 
@@ -5516,15 +5398,40 @@ export default function App({ entryMode }: AppProps = {}) {
 
         {/* ================= AUTH MODAL ================= */}
         {showAuthModal && (
-          <motion.div key="auth" variants={pageTransition} initial="hidden" animate="visible" exit="exit">
-            <div style={{
-              padding: '2rem',
-              maxWidth: '600px',
-              margin: '2rem auto',
-              background: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-            }}>
+          <motion.div
+            key="auth"
+            variants={pageTransition}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={() => setShowAuthModal(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 3000,
+              background: 'rgba(2, 6, 23, 0.55)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label={authMode === 'login' ? 'Login form' : 'Registration form'}
+              style={{
+                width: '100%',
+                maxWidth: '600px',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                padding: '2rem',
+                background: 'white',
+                borderRadius: '12px',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.25)'
+              }}
+            >
               <button
                 onClick={() => setShowAuthModal(false)}
                 style={{
@@ -6410,8 +6317,8 @@ export default function App({ entryMode }: AppProps = {}) {
                             </div>
                           )}
                         </div>
-                        <button type="submit" className="btn btn-primary margin-top-2" disabled={galleryUploading}>
-                          {galleryUploading ? '⏳ Uploading...' : '📤 Upload to Supabase'}
+                        <button type="submit" className="btn btn-primary margin-top-2">
+                          📤 Add via Admin Portal
                         </button>
                       </form>
 
@@ -6598,9 +6505,6 @@ export default function App({ entryMode }: AppProps = {}) {
                           </select>
                         </div>
 
-                        <details open style={{ marginBottom: '1rem' }}>
-                          <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.9rem' }}>Core Entry Information</summary>
-
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
                             <label>Date</label>
@@ -6643,11 +6547,6 @@ export default function App({ entryMode }: AppProps = {}) {
                           </div>
                         </div>
 
-                        </details>
-
-                        <details open style={{ marginBottom: '1rem' }}>
-                          <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.9rem' }}>Sabbath School Section</summary>
-
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
                             <label>Superintendent</label>
@@ -6658,69 +6557,12 @@ export default function App({ entryMode }: AppProps = {}) {
                             />
                           </div>
                           <div className="form-group">
-                            <label>Assistant Superintendent</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.assistantSuperintendent}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, assistantSuperintendent: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Secretary</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.secretary}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, secretary: e.target.value }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Lesson Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.lessonLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, lessonLeader: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Sabbath School Song Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.sabbathSchoolSongLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sabbathSchoolSongLeader: e.target.value }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Sabbath School Opening Prayer</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.sabbathSchoolOpeningPrayer}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, sabbathSchoolOpeningPrayer: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
                             <label>Lesson Number</label>
                             <input
                               type="number"
                               min="1"
                               value={sabbathProgramForm.lessonNumber}
                               onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, lessonNumber: parseInt(e.target.value || '1', 10) }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Quarter / Series Label</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.quarter}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, quarter: e.target.value }))}
                             />
                           </div>
                         </div>
@@ -6736,167 +6578,20 @@ export default function App({ entryMode }: AppProps = {}) {
 
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
-                            <label>Memory Verse Reference</label>
+                            <label>Song Leader</label>
                             <input
                               type="text"
-                              value={sabbathProgramForm.memoryVerseRef}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, memoryVerseRef: e.target.value }))}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Discussion Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.discussionLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, discussionLeader: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="form-group">
-                          <label>Memory Verse</label>
-                          <textarea
-                            value={sabbathProgramForm.memoryVerse}
-                            onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, memoryVerse: e.target.value }))}
-                            rows={3}
-                          />
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Mission Spotlight</label>
-                            <textarea
-                              value={sabbathProgramForm.missionSpotlight}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, missionSpotlight: e.target.value }))}
-                              rows={3}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Offering Designation</label>
-                            <textarea
-                              value={sabbathProgramForm.offeringDesignation}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, offeringDesignation: e.target.value }))}
-                              rows={3}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="form-group">
-                          <label>Opening Songs</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'number', label: 'Hymn Number', placeholder: '7' },
-                              { key: 'title', label: 'Title', placeholder: 'From All That Dwell Below the Skies' },
-                            ]}
-                            value={sabbathProgramForm.openingSongs}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, openingSongs: value }))}
-                            parseRows={(value) => parseOpeningSongs(value).map((item) => ({ number: item.number, title: item.title }))}
-                            serializeRows={serializeOpeningSongRows}
-                            addLabel="Add Opening Song"
-                            helperText="Each row becomes one opening song item on the public page."
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Daily Readings</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'day', label: 'Day', placeholder: 'Sunday' },
-                              { key: 'title', label: 'Reading Title', placeholder: 'The Veil Was Torn' },
-                              { key: 'text', label: 'Text', placeholder: 'Matthew 27:51; Hebrews 10:19-22' },
-                            ]}
-                            value={sabbathProgramForm.dailyReadings}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, dailyReadings: value }))}
-                            parseRows={(value) => parseDailyReadings(value).map((item) => ({ day: item.day, title: item.title, text: item.text }))}
-                            serializeRows={serializeDailyReadingRows}
-                            addLabel="Add Daily Reading"
-                            helperText="These rows populate the weekly lesson reading list."
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Classes and Teachers</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'name', label: 'Class Name', placeholder: 'Youth' },
-                              { key: 'ageRange', label: 'Age Range', placeholder: '16 - 25 yrs' },
-                              { key: 'teacher', label: 'Teacher', placeholder: 'Bro. Twine Enok' },
-                              { key: 'room', label: 'Room', placeholder: 'Chapel Annex' },
-                            ]}
-                            value={sabbathProgramForm.classes}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, classes: value }))}
-                            parseRows={(value) => parseClasses(value).map((item) => ({ name: item.name, ageRange: item.ageRange, teacher: item.teacher, room: item.room }))}
-                            serializeRows={serializeClassRows}
-                            addLabel="Add Class"
-                            helperText="Use one row per Sabbath School class."
-                          />
-                        </div>
-
-                        </details>
-
-                        <hr style={{ margin: '1rem 0', border: 'none', borderTop: '1px solid var(--border-color)' }} />
-
-                        <details open style={{ marginBottom: '1rem' }}>
-                          <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.9rem' }}>Divine Service and Sermon</summary>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Divine Service Song Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.divineSongLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, divineSongLeader: e.target.value }))}
+                              value={sabbathProgramForm.songLeader}
+                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, songLeader: e.target.value }))}
                               disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
                           <div className="form-group">
-                            <label>Divine Service Opening Prayer</label>
+                            <label>Opening Prayer</label>
                             <input
                               type="text"
-                              value={sabbathProgramForm.divineOpeningPrayer}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, divineOpeningPrayer: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Organist</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.organist}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, organist: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Worship Coordinator</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.worshipCoordinator}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, worshipCoordinator: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Tithes and Offering</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.tithesOffering}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, tithesOffering: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Welcome and Announcements</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.welcomeAndAnnouncements}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, welcomeAndAnnouncements: e.target.value }))}
+                              value={sabbathProgramForm.openingPrayer}
+                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, openingPrayer: e.target.value }))}
                               disabled={sabbathSchoolOnlyAccess}
                             />
                           </div>
@@ -6953,49 +6648,6 @@ export default function App({ entryMode }: AppProps = {}) {
                           />
                         </div>
 
-                        <div className="form-group">
-                          <label>Worship Hymns</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'number', label: 'Hymn Number', placeholder: '67' },
-                              { key: 'title', label: 'Title', placeholder: 'Holy, Holy, Holy! Lord God Almighty' },
-                              { key: 'book', label: 'Book', placeholder: 'Bridge Hymnal' },
-                              { key: 'moment', label: 'Moment', placeholder: 'Hymn of Praise' },
-                            ]}
-                            value={sabbathProgramForm.hymns}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, hymns: value }))}
-                            parseRows={(value) => parseHymns(value).map((item) => ({ number: item.number, title: item.title, book: item.book, moment: item.moment }))}
-                            serializeRows={serializeHymnRows}
-                            addLabel="Add Worship Hymn"
-                            helperText="These rows drive the worship hymns section on the page."
-                            disabled={sabbathSchoolOnlyAccess}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Special Items</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'group', label: 'Group', placeholder: 'Seattle International Choir' },
-                              { key: 'song', label: 'Song', placeholder: 'How Great Thou Art' },
-                              { key: 'type', label: 'Type', placeholder: 'Choir Anthem' },
-                              { key: 'color', label: 'Color', placeholder: '#8B5CF6' },
-                            ]}
-                            value={sabbathProgramForm.specialItems}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, specialItems: value }))}
-                            parseRows={(value) => parseSpecialItems(value).map((item) => ({ group: item.group, song: item.song, type: item.type, color: item.color }))}
-                            serializeRows={serializeSpecialItemRows}
-                            addLabel="Add Special Item"
-                            helperText="Use a hex color if you want the item card tint to change."
-                            disabled={sabbathSchoolOnlyAccess}
-                          />
-                        </div>
-
-                        </details>
-
-                        <details open style={{ marginBottom: '1rem' }}>
-                          <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--primary)', marginBottom: '0.9rem' }}>Closing and Afternoon Programme</summary>
-
                         <div className="grid grid-2 gap-3">
                           <div className="form-group">
                             <label>Closing Prayer</label>
@@ -7038,75 +6690,6 @@ export default function App({ entryMode }: AppProps = {}) {
                           </div>
                         </div>
 
-                        <div className="form-group">
-                          <label>Afternoon Prayer Focus</label>
-                          <input
-                            type="text"
-                            value={sabbathProgramForm.afternoonPrayerFocus}
-                            onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, afternoonPrayerFocus: e.target.value }))}
-                            disabled={sabbathSchoolOnlyAccess}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Prayer Points</label>
-                          <StructuredRowsEditor
-                            columns={[
-                              { key: 'value', label: 'Prayer Point', placeholder: 'Pray for students sitting end-of-semester exams this week' },
-                            ]}
-                            value={sabbathProgramForm.afternoonPrayerPoints}
-                            onChange={(value) => setSabbathProgramForm(prev => ({ ...prev, afternoonPrayerPoints: value }))}
-                            parseRows={(value) => parseStructuredLines(value).map((item) => ({ value: item }))}
-                            serializeRows={serializeSingleValueRows}
-                            addLabel="Add Prayer Point"
-                            helperText="Each row becomes one afternoon prayer point."
-                            disabled={sabbathSchoolOnlyAccess}
-                          />
-                        </div>
-
-                        <div className="grid grid-2 gap-3">
-                          <div className="form-group">
-                            <label>Discussion Topic</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.discussionTopic}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, discussionTopic: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>Discussion Leader</label>
-                            <input
-                              type="text"
-                              value={sabbathProgramForm.afternoonDiscussionLeader}
-                              onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, afternoonDiscussionLeader: e.target.value }))}
-                              disabled={sabbathSchoolOnlyAccess}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="form-group">
-                          <label>Discussion Anchor Text</label>
-                          <textarea
-                            value={sabbathProgramForm.discussionText}
-                            onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, discussionText: e.target.value }))}
-                            disabled={sabbathSchoolOnlyAccess}
-                            rows={3}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Discussion Summary</label>
-                          <textarea
-                            value={sabbathProgramForm.discussionSummary}
-                            onChange={(e) => setSabbathProgramForm(prev => ({ ...prev, discussionSummary: e.target.value }))}
-                            disabled={sabbathSchoolOnlyAccess}
-                            rows={5}
-                          />
-                        </div>
-
-                        </details>
-
                         <hr style={{ margin: '1rem 0', border: 'none', borderTop: '1px solid var(--border-color)' }} />
 
                         <details>
@@ -7143,7 +6726,7 @@ export default function App({ entryMode }: AppProps = {}) {
                         )}
 
                         <p className="text-muted" style={{ marginTop: '0.75rem', fontSize: '0.8rem' }}>
-                          All visible Sabbath Programme page content is editable above. Keep the advanced JSON editor for bulk edits or structure-level fixes.
+                          Core fields here cover the main displayed programme information. Use the advanced editor for hymns, prayer points, and detailed nested sections.
                         </p>
                       </div>
                     </div>
@@ -7618,121 +7201,45 @@ export default function App({ entryMode }: AppProps = {}) {
                   {/* Prayers List */}
                   {activeAdminTab === 'admin-prayers' && (
                     <div className="admin-tab-content active">
-                      <h2>🙏 Prayer Requests Chamber Log</h2>
-                      
-                      {/* Stats Cards */}
-                      <div className="grid grid-4 gap-2 margin-top-2" style={{ marginBottom: '2rem' }}>
-                        <div className="card" style={{ padding: '1rem', textAlign: 'center', backgroundColor: 'rgba(33, 150, 243, 0.05)', border: '1px solid rgba(33, 150, 243, 0.2)' }}>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--primary)' }}>{prayers.length}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Total Requests</div>
-                        </div>
-                        <div className="card" style={{ padding: '1rem', textAlign: 'center', backgroundColor: 'rgba(212, 175, 55, 0.05)', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--accent)' }}>{prayers.filter(p => !p.confidential).length}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Public Requests</div>
-                        </div>
-                        <div className="card" style={{ padding: '1rem', textAlign: 'center', backgroundColor: 'rgba(211, 47, 47, 0.05)', border: '1px solid rgba(211, 47, 47, 0.2)' }}>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#d32f2f' }}>{prayers.filter(p => p.confidential).length}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Confidential</div>
-                        </div>
-                        <div className="card" style={{ padding: '1rem', textAlign: 'center', backgroundColor: 'rgba(76, 175, 80, 0.05)', border: '1px solid rgba(76, 175, 80, 0.2)' }}>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#4CAF50' }}>{prayers.filter(p => p.follow_up_status === 'completed').length}</div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Completed</div>
-                        </div>
-                      </div>
-
-                      {/* Prayer Status Legend */}
-                      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.9rem' }}>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#2196F3', borderRadius: '2px', marginRight: '0.5rem' }}></span>Received</div>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#FF9800', borderRadius: '2px', marginRight: '0.5rem' }}></span>Assigned</div>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#9C27B0', borderRadius: '2px', marginRight: '0.5rem' }}></span>Contacted</div>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#F44336', borderRadius: '2px', marginRight: '0.5rem' }}></span>Ongoing</div>
-                        <div><span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: '#4CAF50', borderRadius: '2px', marginRight: '0.5rem' }}></span>Completed</div>
-                      </div>
-
-                      <div className="table-responsive">
+                      <h2>Prayer Requests Chamber Log</h2>
+                      <div className="table-responsive margin-top-2">
                         <table className="admin-table">
                           <thead>
                             <tr>
                               <th>Name</th>
-                              <th>Request Preview</th>
-                              <th>Care Type</th>
-                              <th>Status</th>
-                              <th>Privacy</th>
-                              <th>Follow-up Notes</th>
+                              <th>Request</th>
+                              <th>Confidential?</th>
                               <th>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
                             {prayers.length === 0 ? (
-                              <tr><td colSpan={7} className="text-center">No prayer requests submitted yet.</td></tr>
+                              <tr><td colSpan={4} className="text-center">No prayer requests submitted yet.</td></tr>
                             ) : (
                               prayers.map(item => (
                                 editingPrayerId === item.id ? (
-                                  <tr key={item.id} style={{ backgroundColor: 'rgba(33, 150, 243, 0.05)' }}>
-                                    <td style={{ width: '120px' }}>
-                                      <input value={prayerDrafts[item.id!]?.name ?? item.name} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), name: e.target.value } }))} placeholder="Name" />
-                                    </td>
-                                    <td style={{ width: '180px' }}>
-                                      <textarea value={prayerDrafts[item.id!]?.content ?? item.content} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), content: e.target.value } }))} rows={2} style={{ fontSize: '0.85rem' }} />
-                                    </td>
-                                    <td style={{ width: '110px' }}>
-                                      <select value={prayerDrafts[item.id!]?.care_request_type ?? item.care_request_type ?? 'none'} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), care_request_type: e.target.value as any } }))}>
-                                        <option value="none">None</option>
-                                        <option value="pastoral_call">Pastoral Call</option>
-                                        <option value="elder_visit">Elder Visit</option>
-                                        <option value="counseling">Counseling</option>
-                                        <option value="prayer_partner">Prayer Partner</option>
-                                      </select>
-                                    </td>
-                                    <td style={{ width: '110px' }}>
-                                      <select value={prayerDrafts[item.id!]?.follow_up_status ?? item.follow_up_status ?? 'received'} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), follow_up_status: e.target.value as any } }))}>
-                                        <option value="received">Received</option>
-                                        <option value="assigned">Assigned</option>
-                                        <option value="contacted">Contacted</option>
-                                        <option value="ongoing">Ongoing</option>
-                                        <option value="completed">Completed</option>
-                                      </select>
-                                    </td>
-                                    <td style={{ width: '100px' }}>
+                                  <tr key={item.id}>
+                                    <td><input value={prayerDrafts[item.id!]?.name ?? item.name} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), name: e.target.value } }))} /></td>
+                                    <td><textarea value={prayerDrafts[item.id!]?.content ?? item.content} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), content: e.target.value } }))} rows={3} /></td>
+                                    <td>
                                       <select value={(prayerDrafts[item.id!]?.confidential ?? item.confidential) ? 'true' : 'false'} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), confidential: e.target.value === 'true' } }))}>
                                         <option value="false">PUBLIC</option>
                                         <option value="true">CONFIDENTIAL</option>
                                       </select>
                                     </td>
-                                    <td style={{ width: '150px' }}>
-                                      <textarea value={prayerDrafts[item.id!]?.follow_up_notes ?? item.follow_up_notes ?? ''} onChange={(e) => setPrayerDrafts((prev) => ({ ...prev, [item.id!]: { ...(prev[item.id!] ?? item), follow_up_notes: e.target.value } }))} rows={2} placeholder="Pastoral notes..." style={{ fontSize: '0.85rem' }} />
-                                    </td>
-                                    <td style={{ width: '100px' }}>
+                                    <td>
                                       <button onClick={() => handleAdminUpdatePrayer(item.id!)} className="btn btn-small btn-accent">Save</button>
-                                      <button onClick={() => setEditingPrayerId(null)} className="btn btn-small btn-outline" style={{ marginTop: '0.5rem' }}>Cancel</button>
+                                      <button onClick={() => setEditingPrayerId(null)} className="btn btn-small btn-outline">Cancel</button>
                                     </td>
                                   </tr>
                                 ) : (
                                   <tr key={item.id}>
-                                    <td><strong>{item.name || '(Anonymous)'}</strong></td>
-                                    <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{item.content.substring(0, 50)}...</td>
-                                    <td>
-                                      {item.care_request_type && item.care_request_type !== 'none' ? (
-                                        <span style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: 'rgba(33, 150, 243, 0.15)', color: 'var(--primary)', borderRadius: '4px', fontSize: '0.85rem' }}>
-                                          {item.care_request_type === 'pastoral_call' ? '📞 Pastoral Call' : item.care_request_type === 'elder_visit' ? '👥 Elder Visit' : item.care_request_type === 'counseling' ? '💬 Counseling' : '🤝 Prayer Partner'}
-                                        </span>
-                                      ) : (
-                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>—</span>
-                                      )}
-                                    </td>
-                                    <td>
-                                      <span style={{ display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '500',
-                                        backgroundColor: item.follow_up_status === 'received' ? 'rgba(33, 150, 243, 0.15)' : item.follow_up_status === 'assigned' ? 'rgba(255, 152, 0, 0.15)' : item.follow_up_status === 'contacted' ? 'rgba(156, 39, 176, 0.15)' : item.follow_up_status === 'ongoing' ? 'rgba(244, 67, 54, 0.15)' : 'rgba(76, 175, 80, 0.15)',
-                                        color: item.follow_up_status === 'received' ? '#2196F3' : item.follow_up_status === 'assigned' ? '#FF9800' : item.follow_up_status === 'contacted' ? '#9C27B0' : item.follow_up_status === 'ongoing' ? '#F44336' : '#4CAF50'
-                                      }}>
-                                        {item.follow_up_status === 'received' ? '🔵 Received' : item.follow_up_status === 'assigned' ? '🟠 Assigned' : item.follow_up_status === 'contacted' ? '🟣 Contacted' : item.follow_up_status === 'ongoing' ? '🔴 Ongoing' : '✅ Completed'}
-                                      </span>
-                                    </td>
-                                    <td>{item.confidential ? <span className="badge badge-accent">🔐 CONFIDENTIAL</span> : <span className="badge">🔓 PUBLIC</span>}</td>
-                                    <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{item.follow_up_notes || '—'}</td>
+                                    <td><strong>{item.name}</strong></td>
+                                    <td>{item.content}</td>
+                                    <td>{item.confidential ? <span className="badge badge-accent">CONFIDENTIAL</span> : <span className="badge">PUBLIC</span>}</td>
                                     <td>
                                       <button onClick={() => item.id && handleEditPrayer(item)} className="btn btn-small btn-outline">Edit</button>
-                                      <button onClick={() => item.id && handleAdminDeletePrayer(item.id)} className="btn btn-small btn-outline" style={{ marginTop: '0.5rem' }}>Delete</button>
+                                      <button onClick={() => item.id && handleAdminDeletePrayer(item.id)} className="btn btn-small btn-outline">Delete</button>
                                     </td>
                                   </tr>
                                 )
@@ -7799,7 +7306,10 @@ export default function App({ entryMode }: AppProps = {}) {
                     <div className="admin-tab-content active">
                       <div className="flex justify-between items-center">
                         <h2>Events Calendar Management</h2>
-                        <button onClick={() => setShowAddEventModal(true)} className="btn btn-accent btn-small">+ Add New Event</button>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button onClick={() => handleAdminExportEventAttendees()} className="btn btn-outline btn-small">Export All Attendees (CSV)</button>
+                          <button onClick={() => setShowAddEventModal(true)} className="btn btn-accent btn-small">+ Add New Event</button>
+                        </div>
                       </div>
                       <div className="table-responsive margin-top-2">
                         <table className="admin-table">
@@ -7808,6 +7318,10 @@ export default function App({ entryMode }: AppProps = {}) {
                               <th>Event Name</th>
                               <th>Date</th>
                               <th>Location</th>
+                              <th>Category</th>
+                              <th>Capacity</th>
+                              <th>RSVP</th>
+                              <th>Waitlist</th>
                               <th>Actions</th>
                             </tr>
                           </thead>
@@ -7817,8 +7331,13 @@ export default function App({ entryMode }: AppProps = {}) {
                                 <td><strong>{item.title}</strong></td>
                                 <td>{item.date}</td>
                                 <td>{item.location}</td>
+                                <td>{item.category || 'General'}</td>
+                                <td>{item.capacity === null || item.capacity === undefined ? 'Unlimited' : item.capacity}</td>
+                                <td>{item.attendee_count ?? 0}</td>
+                                <td>{item.waitlist_count ?? 0}</td>
                                 <td>
-                                    <button onClick={() => openEventEditor(item)} className="btn btn-small btn-outline">Edit</button>
+                                  <button onClick={() => handleAdminExportEventAttendees(item.id)} className="btn btn-small btn-outline">CSV</button>
+                                  <button onClick={() => openEventEditor(item)} className="btn btn-small btn-outline">Edit</button>
                                   <button onClick={() => handleAdminDeleteEvent(item.id)} className="btn btn-small btn-outline">Remove</button>
                                 </td>
                               </tr>
@@ -8077,7 +7596,7 @@ export default function App({ entryMode }: AppProps = {}) {
       </main>
 
       {/* Footer */}
-      {!isAdminEntry && (
+      {!IS_ADMIN_ENTRY && (
       <footer className="main-footer">
         <div className="container footer-grid grid grid-3 gap-3">
           <div>
@@ -8252,6 +7771,36 @@ export default function App({ entryMode }: AppProps = {}) {
                   placeholder="e.g. Main Assembly Pavilion" 
                 />
               </div>
+              <div className="grid grid-2 gap-3">
+                <div className="form-group">
+                  <label>Category</label>
+                  <input
+                    type="text"
+                    value={addEventForm.category}
+                    onChange={(e) => setAddEventForm({ ...addEventForm, category: e.target.value })}
+                    placeholder="e.g. Outreach, Worship, Youth"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Capacity (optional)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={addEventForm.capacity}
+                    onChange={(e) => setAddEventForm({ ...addEventForm, capacity: e.target.value })}
+                    placeholder="Leave empty for unlimited"
+                  />
+                </div>
+              </div>
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                <input
+                  id="event-waitlist-enabled"
+                  type="checkbox"
+                  checked={addEventForm.waitlist_enabled}
+                  onChange={(e) => setAddEventForm({ ...addEventForm, waitlist_enabled: e.target.checked })}
+                />
+                <label htmlFor="event-waitlist-enabled" style={{ margin: 0 }}>Enable waitlist when event is full</label>
+              </div>
               <div className="form-group">
                 <label>Description</label>
                 <textarea 
@@ -8341,3 +7890,4 @@ export default function App({ entryMode }: AppProps = {}) {
     </div>
   );
 }
+

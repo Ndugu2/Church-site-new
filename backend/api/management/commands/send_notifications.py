@@ -17,7 +17,7 @@ class Command(BaseCommand):
         
         for event in events_tomorrow:
             # Get registered attendees
-            attendees = EventAttendance.objects.filter(event=event).select_related('member')
+            attendees = EventAttendance.objects.filter(event=event, is_waitlisted=False).select_related('member')
             
             for attendance in attendees:
                 member = attendance.member

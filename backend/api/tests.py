@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
-from .models import AdminAuditLog, BlogPost, Donation, Event, EventAttendance, ForumCategory, ForumPost, ForumThread, MemberProfile
+from .models import AdminAuditLog, BibleStudy, BlogPost, Donation, Event, EventAttendance, ForumCategory, ForumPost, ForumThread, MemberProfile
 
 
 class PermissionHardeningTests(APITestCase):
@@ -104,14 +104,91 @@ class CommunityJourneyTests(APITestCase):
 			title='Camp Meeting',
 			date='2026-09-01',
 			location='Main Hall',
+			category='Worship',
+			capacity=1,
+			waitlist_enabled=True,
 			desc='Spiritual gathering',
 			is_published=True,
 		)
 
 	def test_event_registration_persists(self):
-		res = self.client.post(f'/api/events/{self.event.id}/register/')
-		self.assertEqual(res.status_code, 200)
+		res = self.client.post(f'/api/events/{self.event.id}/register/', {
+			'name': 'Community User',
+			'email': 'community@example.com',
+			'phone': '+256700111222',
+			'notes': 'Will come with a friend.',
+		}, format='json')
+		self.assertEqual(res.status_code, 201)
 		self.assertEqual(EventAttendance.objects.count(), 1)
+		attendance = EventAttendance.objects.get()
+		self.assertEqual(attendance.contact_name, 'Community User')
+		self.assertEqual(attendance.contact_email, 'community@example.com')
+		self.assertEqual(attendance.contact_phone, '+256700111222')
+		self.assertEqual(attendance.notes, 'Will come with a friend.')
+
+	def test_event_registration_repeat_returns_existing_record(self):
+		first_res = self.client.post(f'/api/events/{self.event.id}/register/', {
+			'name': 'Community User',
+			'email': 'community@example.com',
+			'phone': '+256700111222',
+			'notes': 'Initial note',
+		}, format='json')
+		self.assertEqual(first_res.status_code, 201)
+
+		second_res = self.client.post(f'/api/events/{self.event.id}/register/', {
+			'name': 'Community User Updated',
+			'email': 'community+new@example.com',
+			'phone': '+256701999000',
+			'notes': 'Updated note',
+		}, format='json')
+		self.assertEqual(second_res.status_code, 200)
+		self.assertTrue(second_res.data.get('already_registered'))
+		self.assertEqual(EventAttendance.objects.count(), 1)
+
+		attendance = EventAttendance.objects.get()
+		self.assertEqual(attendance.contact_name, 'Community User Updated')
+		self.assertEqual(attendance.contact_email, 'community+new@example.com')
+		self.assertEqual(attendance.contact_phone, '+256701999000')
+		self.assertEqual(attendance.notes, 'Updated note')
+
+	def test_event_registration_uses_waitlist_when_capacity_reached(self):
+		first_res = self.client.post(f'/api/events/{self.event.id}/register/', {
+			'name': 'First Member',
+			'email': 'first@example.com',
+			'phone': '+256700000001',
+			'notes': '',
+		}, format='json')
+		self.assertEqual(first_res.status_code, 201)
+		self.assertFalse(first_res.data.get('waitlisted'))
+
+		second_user = User.objects.create_user(username='second_member', password='Pass12345!')
+		MemberProfile.objects.create(user=second_user)
+		second_token = Token.objects.create(user=second_user)
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {second_token.key}')
+
+		second_res = self.client.post(f'/api/events/{self.event.id}/register/', {
+			'name': 'Second Member',
+			'email': 'second@example.com',
+			'phone': '+256700000002',
+			'notes': '',
+		}, format='json')
+		self.assertEqual(second_res.status_code, 201)
+		self.assertTrue(second_res.data.get('waitlisted'))
+		self.assertEqual(second_res.data.get('waitlist_position'), 1)
+
+	def test_member_event_registrations_endpoint_returns_rsvp_status(self):
+		self.client.post(f'/api/events/{self.event.id}/register/', {
+			'name': 'Community User',
+			'email': 'community@example.com',
+			'phone': '+256700111222',
+			'notes': 'See you there',
+		}, format='json')
+
+		res = self.client.get('/api/members/my_event_registrations/')
+		self.assertEqual(res.status_code, 200)
+		self.assertEqual(len(res.data), 1)
+		self.assertEqual(res.data[0]['event_id'], self.event.id)
+		self.assertIn(res.data[0]['rsvp_status'], ['registered', 'completed'])
 
 	def test_forum_thread_and_reply_persist(self):
 		thread_res = self.client.post('/api/forum-threads/', {
@@ -130,6 +207,19 @@ class CommunityJourneyTests(APITestCase):
 
 		self.assertEqual(ForumThread.objects.count(), 1)
 		self.assertEqual(ForumPost.objects.count(), 1)
+
+	def test_forum_posting_creates_member_profile_if_missing(self):
+		user_without_profile = User.objects.create_user(username='community_no_profile', password='Pass12345!')
+		token = Token.objects.create(user=user_without_profile)
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
+
+		thread_res = self.client.post('/api/forum-threads/', {
+			'category': self.category.id,
+			'title': 'Profile auto-create check',
+			'content': 'Testing forum posting without a pre-existing member profile.'
+		}, format='json')
+		self.assertEqual(thread_res.status_code, 201)
+		self.assertTrue(MemberProfile.objects.filter(user=user_without_profile).exists())
 
 
 class AnnouncementBackendCompatibilityTests(APITestCase):
@@ -196,6 +286,21 @@ class AnnouncementBackendCompatibilityTests(APITestCase):
 		ids = [item['id'] for item in results]
 		self.assertIn(expired.id, ids)
 
+	def test_public_can_increment_blog_view_counter(self):
+		post = BlogPost.objects.create(
+			title='Public View Test',
+			slug='public-view-test',
+			content='Testing public view increments.',
+			category='news',
+			is_published=True,
+			views=0,
+		)
+
+		res = self.client.post(f'/api/blog/{post.id}/view/')
+		self.assertEqual(res.status_code, 200)
+		post.refresh_from_db()
+		self.assertEqual(post.views, 1)
+
 
 class AccessSeparationTests(APITestCase):
 	def setUp(self):
@@ -227,6 +332,26 @@ class AccessSeparationTests(APITestCase):
 
 		list_res = self.client.get('/api/bible-studies/')
 		self.assertEqual(list_res.status_code, 401)
+
+	def test_staff_can_assign_bible_study_group(self):
+		study = BibleStudy.objects.create(
+			name='Jane Doe',
+			email='jane@example.com',
+			phone='+256711111111',
+			country='Uganda',
+			course='Daniel Study',
+		)
+		staff = User.objects.create_user(username='study_admin', password='Pass12345!', is_staff=True, is_superuser=True)
+		staff_token = Token.objects.create(user=staff)
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {staff_token.key}')
+
+		patch_res = self.client.patch(f'/api/bible-studies/{study.id}/', {
+			'group_name': 'Tuesday Evening Group',
+		}, format='json')
+		self.assertEqual(patch_res.status_code, 200)
+
+		study.refresh_from_db()
+		self.assertEqual(study.group_name, 'Tuesday Evening Group')
 
 	def test_public_can_create_but_not_list_donations(self):
 		create_res = self.client.post('/api/donations/', {
@@ -272,6 +397,18 @@ class AdminSessionAndAuditTests(APITestCase):
 		self.assertEqual(res.status_code, 200)
 		self.assertTrue(res.data.get('authenticated'))
 		self.assertTrue(res.data.get('is_staff'))
+
+	def test_admin_session_includes_testimonies_tab_when_group_assigned(self):
+		testimony_staff = User.objects.create_user(username='testimony_staff', password='Pass12345!', is_staff=True)
+		testimony_token = Token.objects.create(user=testimony_staff)
+		testimony_group, _ = Group.objects.get_or_create(name='Access Testimonies')
+		testimony_staff.groups.add(testimony_group)
+
+		self.client.credentials(HTTP_AUTHORIZATION=f'Token {testimony_token.key}')
+		res = self.client.get('/api/admin/session/')
+		self.assertEqual(res.status_code, 200)
+		self.assertTrue(res.data.get('is_staff'))
+		self.assertIn('admin-testimonies', res.data.get('admin_tabs', []))
 
 	def test_staff_write_creates_admin_audit_log(self):
 		self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.staff_token.key}')
@@ -354,7 +491,7 @@ class AdminAccountManagementTests(APITestCase):
 			'username': 'evangelistic_staff',
 			'email': 'evangelistic@example.com',
 			'password': 'Pass12345!',
-			'access_sections': ['bible_studies', 'sabbath_programme'],
+			'access_sections': ['bible_studies', 'sabbath_programme', 'testimonies'],
 			'sabbath_programme_scope': 'sabbath_school_only',
 			'full_name': 'Eva Ngelist',
 		}, format='json')
@@ -363,6 +500,7 @@ class AdminAccountManagementTests(APITestCase):
 		self.assertTrue(created.is_staff)
 		self.assertTrue(created.groups.filter(name='Access Bible Studies').exists())
 		self.assertTrue(created.groups.filter(name='Access Sabbath Programme').exists())
+		self.assertTrue(created.groups.filter(name='Access Testimonies').exists())
 		self.assertTrue(created.groups.filter(name='Scope Sabbath School Only').exists())
 		entry = AdminAuditLog.objects.filter(resource_type='StaffAccount', resource_label='evangelistic_staff', action='create').first()
 		self.assertIsNotNone(entry)

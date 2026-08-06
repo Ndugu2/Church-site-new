@@ -1,6 +1,7 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { BookOpen, Heart, Users, DollarSign, Target, Gift, Phone, Mail, MapPin, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -25,6 +26,39 @@ interface StudentCase {
   needed: number;
   raised: number;
   urgent: boolean;
+}
+
+interface DonationWay {
+  icon: 'DollarSign' | 'Heart' | 'Gift' | 'Users';
+  title: string;
+  description: string;
+  highlight: string;
+}
+
+interface ImpactLevel {
+  amount: string;
+  impact: string;
+}
+
+interface ContactPoint {
+  icon: 'Phone' | 'Mail' | 'MapPin';
+  label: string;
+}
+
+export interface GoBackToSchoolPageContent {
+  hero_title: string;
+  hero_subtitle: string;
+  overall_fundraising_title: string;
+  overall_fundraising_copy: string;
+  overall_stats: Array<{ value: string; label: string }>;
+  student_cases: StudentCase[];
+  ways_to_give: DonationWay[];
+  impact_levels: ImpactLevel[];
+  contact_points: ContactPoint[];
+}
+
+interface GoBackToSchoolProps {
+  onSelectDonationOption?: (option: DonationWay) => void;
 }
 
 const studentCases: StudentCase[] = [
@@ -68,25 +102,25 @@ const studentCases: StudentCase[] = [
 
 const waysToDonate = [
   {
-    icon: <DollarSign size={28} />,
+    icon: 'DollarSign' as const,
     title: 'One-Time Gift',
     description: 'Make a single contribution of any amount. Every shilling directly helps a student stay in school.',
     highlight: 'As low as UGX 5,000'
   },
   {
-    icon: <Heart size={28} />,
+    icon: 'Heart' as const,
     title: 'Monthly Sponsor',
     description: 'Commit to supporting a student throughout a full term or school year with a recurring monthly pledge.',
     highlight: 'UGX 30,000/month'
   },
   {
-    icon: <Gift size={28} />,
+    icon: 'Gift' as const,
     title: 'Supplies Drive',
     description: 'Donate physical items — exercise books, pens, uniforms, school bags — dropped off at our church office.',
     highlight: 'Drop off anytime'
   },
   {
-    icon: <Users size={28} />,
+    icon: 'Users' as const,
     title: 'Sponsor a Student',
     description: 'Cover the full cost for a specific student on our list. Receive updates on their progress throughout the year.',
     highlight: 'Full sponsorship'
@@ -102,19 +136,87 @@ const impactLevels = [
   { amount: '900,000', impact: 'Covers one full semester of university tuition' }
 ];
 
+export const DEFAULT_GO_BACK_TO_SCHOOL_CONTENT: GoBackToSchoolPageContent = {
+  hero_title: 'Go Back to School Project',
+  hero_subtitle: 'Volunteers like you are the reason children go back to class',
+  overall_fundraising_title: 'Current Fundraising Campaign',
+  overall_fundraising_copy: 'We are raising funds for 4 students this term. Every contribution goes 100% directly to a student\'s education.',
+  overall_stats: [
+    { value: '4', label: 'Students Waiting' },
+    { value: '0%', label: 'Goal Reached' },
+    { value: '0 fees', label: 'Admin Cost' },
+  ],
+  student_cases: studentCases,
+  ways_to_give: waysToDonate,
+  impact_levels: impactLevels,
+  contact_points: [
+    { icon: 'Phone', label: '+256 700 000 000' },
+    { icon: 'Mail', label: 'gobacktoschool@sic.ug' },
+    { icon: 'MapPin', label: 'SIC Office, Bugema University' },
+  ],
+};
+
+const ICON_MAP = {
+  DollarSign,
+  Heart,
+  Gift,
+  Users,
+  Phone,
+  Mail,
+  MapPin,
+} as const;
+
+const normalizeGoBackToSchoolPage = (raw: any): GoBackToSchoolPageContent | null => {
+  const source = raw && typeof raw === 'object' ? (raw.content && typeof raw.content === 'object' ? raw.content : raw) : null;
+  if (!source) return null;
+
+  return {
+    hero_title: typeof source.hero_title === 'string' ? source.hero_title : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.hero_title,
+    hero_subtitle: typeof source.hero_subtitle === 'string' ? source.hero_subtitle : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.hero_subtitle,
+    overall_fundraising_title: typeof source.overall_fundraising_title === 'string' ? source.overall_fundraising_title : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.overall_fundraising_title,
+    overall_fundraising_copy: typeof source.overall_fundraising_copy === 'string' ? source.overall_fundraising_copy : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.overall_fundraising_copy,
+    overall_stats: Array.isArray(source.overall_stats) && source.overall_stats.length > 0 ? source.overall_stats : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.overall_stats,
+    student_cases: Array.isArray(source.student_cases) && source.student_cases.length > 0 ? source.student_cases : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.student_cases,
+    ways_to_give: Array.isArray(source.ways_to_give) && source.ways_to_give.length > 0 ? source.ways_to_give : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.ways_to_give,
+    impact_levels: Array.isArray(source.impact_levels) && source.impact_levels.length > 0 ? source.impact_levels : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.impact_levels,
+    contact_points: Array.isArray(source.contact_points) && source.contact_points.length > 0 ? source.contact_points : DEFAULT_GO_BACK_TO_SCHOOL_CONTENT.contact_points,
+  };
+};
+
 const formatUGX = (amount: number) =>
   'UGX ' + amount.toLocaleString('en-UG');
 
 const progressPercent = (raised: number, needed: number) =>
   Math.min(Math.round((raised / needed) * 100), 100);
 
-export const GoBackToSchool: React.FC = () => {
+export const GoBackToSchool: React.FC<GoBackToSchoolProps> = ({ onSelectDonationOption }) => {
   const [expandedCase, setExpandedCase] = useState<number | null>(null);
   const [donateForm, setDonateForm] = useState({ name: '', email: '', phone: '', amount: '', type: 'one-time', message: '' });
   const [submitted, setSubmitted] = useState(false);
+  const [content, setContent] = useState<GoBackToSchoolPageContent>(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT);
 
-  const totalNeeded = studentCases.reduce((s, c) => s + c.needed, 0);
-  const totalRaised = studentCases.reduce((s, c) => s + c.raised, 0);
+  useEffect(() => {
+    const loadPage = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/go-back-to-school/`);
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        const records = Array.isArray(payload) ? payload : (payload?.results ?? []);
+        const firstRecord = normalizeGoBackToSchoolPage(records[0]);
+        if (firstRecord) {
+          setContent(firstRecord);
+        }
+      } catch {
+        setContent(DEFAULT_GO_BACK_TO_SCHOOL_CONTENT);
+      }
+    };
+
+    loadPage();
+  }, []);
+
+  const totalNeeded = content.student_cases.reduce((s, c) => s + c.needed, 0);
+  const totalRaised = content.student_cases.reduce((s, c) => s + c.raised, 0);
   const overallPercent = progressPercent(totalRaised, totalNeeded);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -129,9 +231,9 @@ export const GoBackToSchool: React.FC = () => {
         <div className="container text-center">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
             <BookOpen size={40} color="var(--accent)" />
-            <h1>Go Back to School Project</h1>
+            <h1>{content.hero_title}</h1>
           </div>
-          <p>Volunteers like you are the reason children go back to class</p>
+          <p>{content.hero_subtitle}</p>
         </div>
       </motion.div>
 
@@ -145,9 +247,9 @@ export const GoBackToSchool: React.FC = () => {
             variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}
           >
             <Target size={36} color="var(--accent)" style={{ marginBottom: '1rem' }} />
-            <h2 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>Current Fundraising Campaign</h2>
+            <h2 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>{content.overall_fundraising_title}</h2>
             <p style={{ color: '#666', marginBottom: '2rem' }}>
-              We are raising funds for <strong>{studentCases.length} students</strong> this term. Every contribution goes 100% directly to a student's education.
+              {content.overall_fundraising_copy}
             </p>
 
             <div style={{ background: '#f0f0f0', borderRadius: '999px', height: '18px', marginBottom: '1rem', overflow: 'hidden' }}>
@@ -171,11 +273,7 @@ export const GoBackToSchool: React.FC = () => {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-              {[
-                { value: `${studentCases.length}`, label: 'Students Waiting' },
-                { value: `${overallPercent}%`, label: 'Goal Reached' },
-                { value: '0 fees', label: 'Admin Cost' }
-              ].map((stat, i) => (
+              {content.overall_stats.map((stat, i) => (
                 <div key={i} style={{ padding: '1rem', background: 'rgba(212,175,55,0.08)', borderRadius: '12px' }}>
                   <div style={{ fontSize: '1.8rem', fontWeight: '700', color: 'var(--accent)' }}>{stat.value}</div>
                   <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '0.25rem' }}>{stat.label}</div>
@@ -195,7 +293,7 @@ export const GoBackToSchool: React.FC = () => {
               className="grid grid-2 gap-4"
               variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
             >
-              {studentCases.map(student => {
+              {content.student_cases.map(student => {
                 const pct = progressPercent(student.raised, student.needed);
                 const isExpanded = expandedCase === student.id;
                 return (
@@ -289,15 +387,32 @@ export const GoBackToSchool: React.FC = () => {
               className="grid grid-2 gap-4"
               variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}
             >
-              {waysToDonate.map((way, i) => (
-                <motion.div key={i} className="card" variants={staggerItem} whileHover={{ y: -6 }}>
+              {content.ways_to_give.map((way, i) => {
+                const WayIcon = ICON_MAP[way.icon];
+                return (
+                <motion.div
+                  key={i}
+                  className="card"
+                  variants={staggerItem}
+                  whileHover={{ y: -6 }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelectDonationOption?.(way)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectDonationOption?.(way);
+                    }
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
                   <div style={{
                     width: '54px', height: '54px', borderRadius: '14px',
                     background: 'linear-gradient(135deg, var(--primary), rgba(30,58,138,0.7))',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'var(--accent)', marginBottom: '1rem'
                   }}>
-                    {way.icon}
+                    <WayIcon size={28} />
                   </div>
                   <h3 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>{way.title}</h3>
                   <p style={{ color: '#666', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '0.75rem' }}>{way.description}</p>
@@ -308,7 +423,8 @@ export const GoBackToSchool: React.FC = () => {
                     {way.highlight}
                   </span>
                 </motion.div>
-              ))}
+                );
+              })}
             </motion.div>
           </motion.div>
 
@@ -325,7 +441,7 @@ export const GoBackToSchool: React.FC = () => {
               <p style={{ color: '#666', textAlign: 'center', marginBottom: '2rem' }}>Every amount makes a real difference</p>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-                {impactLevels.map((level, i) => (
+                {content.impact_levels.map((level, i) => (
                   <div key={i} style={{
                     display: 'flex', alignItems: 'flex-start', gap: '1rem',
                     background: 'white', padding: '1rem', borderRadius: '12px',
@@ -475,19 +591,18 @@ export const GoBackToSchool: React.FC = () => {
                 Want to give physically, volunteer your time, or learn more? Reach us directly.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-                {[
-                  { icon: <Phone size={20} />, label: '+256 700 000 000' },
-                  { icon: <Mail size={20} />, label: 'gobacktoschool@sic.ug' },
-                  { icon: <MapPin size={20} />, label: 'SIC Office, Bugema University' }
-                ].map((item, i) => (
+                {content.contact_points.map((item, i) => {
+                  const ContactIcon = ICON_MAP[item.icon];
+                  return (
                   <div key={i} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     gap: '0.75rem', color: 'rgba(255,255,255,0.9)', fontSize: '0.95rem'
                   }}>
-                    <span style={{ color: 'var(--accent)' }}>{item.icon}</span>
+                    <span style={{ color: 'var(--accent)' }}><ContactIcon size={20} /></span>
                     <span>{item.label}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </motion.div>

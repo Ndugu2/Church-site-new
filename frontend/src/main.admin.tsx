@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import App from './App';
+import AdminPortalApp from './AdminPortalApp';
 import { initializeTelemetry } from './telemetry';
 
 initializeTelemetry();
@@ -12,6 +12,6 @@ if (!window.location.hash || window.location.hash === '#') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AdminPortalApp />
   </StrictMode>,
 );

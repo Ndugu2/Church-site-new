@@ -5,6 +5,7 @@ from .views import (
     EventViewSet,
     PrayerRequestViewSet,
     BibleStudyViewSet,
+    BibleStudyGroupViewSet,
     DonationViewSet,
     ProjectViewSet,
     LessonVideoViewSet,
@@ -25,7 +26,11 @@ from .views import (
     AnalyticsViewSet,
     HymnBookViewSet,
     HymnViewSet,
-    SabbathProgrammeViewSet
+    SabbathProgrammeViewSet,
+    CommunityOutreachPageViewSet,
+    GalleryImageViewSet,
+    GoBackToSchoolPageViewSet,
+    ImageUploadView,
 )
 
 router = DefaultRouter()
@@ -33,6 +38,7 @@ router.register(r'sermons', SermonViewSet)
 router.register(r'events', EventViewSet)
 router.register(r'prayers', PrayerRequestViewSet)
 router.register(r'bible-studies', BibleStudyViewSet)
+router.register(r'bible-study-groups', BibleStudyGroupViewSet)
 router.register(r'donations', DonationViewSet)
 router.register(r'projects', ProjectViewSet)
 router.register(r'lessons', LessonVideoViewSet)
@@ -50,12 +56,16 @@ router.register(r'analytics', AnalyticsViewSet, basename='analytics')
 router.register(r'hymn-books', HymnBookViewSet)
 router.register(r'hymns', HymnViewSet)
 router.register(r'sabbath-programmes', SabbathProgrammeViewSet, basename='sabbath-programmes')
+router.register(r'community-outreach', CommunityOutreachPageViewSet, basename='community-outreach')
+router.register(r'gallery', GalleryImageViewSet, basename='gallery')
+router.register(r'go-back-to-school', GoBackToSchoolPageViewSet, basename='go-back-to-school')
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='api-login'),
     path('register/', RegisterView.as_view(), name='api-register'),
     path('admin/session/', AdminSessionView.as_view(), name='api-admin-session'),
     path('admin/users/', AdminUserManagementView.as_view(), name='api-admin-users'),
+    path('upload/image/', ImageUploadView.as_view(), name='api-image-upload'),
     path('', include(router.urls)),
 ]
 

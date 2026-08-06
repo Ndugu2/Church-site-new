@@ -18,7 +18,20 @@ interface BlogPost {
   category: string;
   views: number;
   created_at: string;
+  action_required?: boolean;
+  cta_text?: string;
+  cta_link?: string;
 }
+
+const formatCategoryLabel = (value: string) => value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+const getExcerpt = (content: string, maxChars = 170) => {
+  const trimmed = content.trim();
+  if (trimmed.length <= maxChars) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, maxChars).trimEnd()}...`;
+};
 
 export const BlogPage: React.FC = () => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -27,6 +40,7 @@ export const BlogPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const getSlugFromHash = () => {
     const match = window.location.hash.match(/^#\/blog\/([^/]+)$/);
@@ -35,12 +49,20 @@ export const BlogPage: React.FC = () => {
 
   useEffect(() => {
     const fetchPosts = async () => {
+      setLoading(true);
+      setError('');
       try {
         const response = await fetch(`${API_BASE_URL}/blog/`);
+        if (!response.ok) {
+          throw new Error(`Could not load blog posts (${response.status}).`);
+        }
         const data = await response.json();
-        setPosts(data.results || data);
+        const list = Array.isArray(data) ? data : (data.results ?? []);
+        setPosts(list);
       } catch (error) {
         console.error('Error fetching blog posts:', error);
+        setError('Unable to load blog posts right now. Please try again shortly.');
+        setPosts([]);
       }
       setLoading(false);
     };
@@ -81,8 +103,26 @@ export const BlogPage: React.FC = () => {
   }, [posts]);
 
   const openPost = (post: BlogPost) => {
-    setSelectedPost(post);
+    const optimisticViews = (post.views || 0) + 1;
+    setSelectedPost({ ...post, views: optimisticViews });
+    setPosts((prev) => prev.map((item) => (item.id === post.id ? { ...item, views: optimisticViews } : item)));
     window.location.hash = `#/blog/${encodeURIComponent(post.slug)}`;
+
+    void fetch(`${API_BASE_URL}/blog/${post.id}/view/`, { method: 'POST' })
+      .then(async (res) => {
+        if (!res.ok) {
+          return null;
+        }
+        const updated = await res.json();
+        if (typeof updated?.views === 'number') {
+          setPosts((prev) => prev.map((item) => (item.id === post.id ? { ...item, views: updated.views } : item)));
+          setSelectedPost((current) => (current && current.id === post.id ? { ...current, views: updated.views } : current));
+        }
+        return null;
+      })
+      .catch(() => {
+        // Keep optimistic counter if request fails.
+      });
   };
 
   const closePost = () => {
@@ -92,7 +132,10 @@ export const BlogPage: React.FC = () => {
     }
   };
 
-  const categories = ['all', ...new Set(posts.map(p => p.category))];
+  const categories = ['all', ...new Set(posts.map((p) => p.category))];
+  const hasFilters = selectedCategory !== 'all' || searchTerm.trim().length > 0;
+  const featuredPost = !selectedPost && filteredPosts.length > 0 ? filteredPosts[0] : null;
+  const secondaryPosts = featuredPost ? filteredPosts.slice(1) : filteredPosts;
 
   return (
     <motion.section
@@ -105,6 +148,12 @@ export const BlogPage: React.FC = () => {
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <h1 style={{ marginBottom: '0.5rem' }}>Church Blog & News</h1>
         <p style={{ color: '#666', marginBottom: '2rem' }}>Stay informed with articles, biblical insights, and church updates</p>
+
+        {error && (
+          <div style={{ marginBottom: '1rem', border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: '10px', padding: '0.8rem 0.95rem' }}>
+            {error}
+          </div>
+        )}
 
         {selectedPost ? (
           <div style={{
@@ -128,7 +177,7 @@ export const BlogPage: React.FC = () => {
               Back to Blog
             </button>
             <p style={{ color: '#666', fontSize: '0.92rem', marginBottom: '0.35rem' }}>
-              {selectedPost.category} • {new Date(selectedPost.created_at).toLocaleDateString()} • {selectedPost.views} views
+              {formatCategoryLabel(selectedPost.category)} • {new Date(selectedPost.created_at).toLocaleDateString()} • {selectedPost.views} views
             </p>
             <h2 style={{ marginBottom: '1rem' }}>{selectedPost.title}</h2>
             {selectedPost.featured_image && (
@@ -139,6 +188,16 @@ export const BlogPage: React.FC = () => {
               />
             )}
             <p style={{ color: '#333', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{selectedPost.content}</p>
+            {selectedPost.action_required && selectedPost.cta_text && selectedPost.cta_link && (
+              <a
+                href={selectedPost.cta_link}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: 'inline-block', marginTop: '1.2rem', background: 'var(--accent)', color: '#1f2937', textDecoration: 'none', borderRadius: '10px', padding: '0.7rem 1rem', fontWeight: 700 }}
+              >
+                {selectedPost.cta_text}
+              </a>
+            )}
           </div>
         ) : (
           <>
@@ -177,10 +236,21 @@ export const BlogPage: React.FC = () => {
           >
             {categories.map(cat => (
               <option key={cat} value={cat}>
-                {cat === 'all' ? 'All Categories' : cat.replace('_', ' ')}
+                {cat === 'all' ? 'All Categories' : formatCategoryLabel(cat)}
               </option>
             ))}
           </select>
+          {hasFilters && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedCategory('all');
+              }}
+              style={{ border: '1px solid #ddd', background: 'white', borderRadius: '4px', padding: '0.75rem 0.9rem', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Clear Filters
+            </button>
+          )}
         </div>
 
         {/* Posts Grid */}
@@ -188,16 +258,58 @@ export const BlogPage: React.FC = () => {
           <p>Loading blog posts...</p>
         ) : filteredPosts.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#666', padding: '2rem', background: '#f7f9fc', borderRadius: '10px' }}>
-            <p style={{ marginBottom: '0.5rem', fontWeight: 600 }}>No blog posts available yet.</p>
-            <p style={{ margin: 0 }}>Published posts from the church office will appear here.</p>
+            <p style={{ marginBottom: '0.5rem', fontWeight: 600 }}>{hasFilters ? 'No matching blog posts found.' : 'No blog posts available yet.'}</p>
+            <p style={{ margin: 0 }}>{hasFilters ? 'Try different keywords or remove filters.' : 'Published posts from the church office will appear here.'}</p>
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-            gap: '2rem'
-          }}>
-            {filteredPosts.map(post => (
+          <>
+            {featuredPost && (
+              <motion.div
+                whileHover={{ y: -3 }}
+                style={{
+                  marginBottom: '1.5rem',
+                  background: 'white',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'
+                }}
+              >
+                {featuredPost.featured_image ? (
+                  <img
+                    src={featuredPost.featured_image}
+                    alt={featuredPost.title}
+                    style={{ width: '100%', height: '100%', minHeight: '260px', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div style={{ background: 'linear-gradient(120deg, #0f3f74, #2563eb)', minHeight: '260px' }} />
+                )}
+                <div style={{ padding: '1.5rem' }}>
+                  <span style={{ display: 'inline-block', background: '#003d7a', color: 'white', padding: '0.22rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', marginBottom: '0.65rem' }}>
+                    Featured • {formatCategoryLabel(featuredPost.category)}
+                  </span>
+                  <h3 style={{ marginBottom: '0.55rem', color: '#0f172a' }}>{featuredPost.title}</h3>
+                  <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '0.85rem' }}>
+                    By {featuredPost.author_name || 'Church Office'} • {new Date(featuredPost.created_at).toLocaleDateString()} • {featuredPost.views} views
+                  </p>
+                  <p style={{ color: '#475569', lineHeight: 1.7, marginBottom: '1rem' }}>{getExcerpt(featuredPost.content, 230)}</p>
+                  <button
+                    onClick={() => openPost(featuredPost)}
+                    style={{ color: '#d4a574', background: 'none', border: 'none', fontWeight: 'bold', padding: 0, cursor: 'pointer' }}
+                  >
+                    Read Feature →
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              gap: '1.25rem'
+            }}>
+            {secondaryPosts.map(post => (
               <motion.div
                 key={post.id}
                 whileHover={{ transform: 'translateY(-4px)' }}
@@ -230,11 +342,11 @@ export const BlogPage: React.FC = () => {
                     fontSize: '0.85rem',
                     marginBottom: '0.5rem'
                   }}>
-                    {post.category}
+                    {formatCategoryLabel(post.category)}
                   </span>
                   <h3 style={{ marginBottom: '0.5rem' }}>{post.title}</h3>
                   <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
-                    By {post.author_name} • {new Date(post.created_at).toLocaleDateString()}
+                    By {post.author_name || 'Church Office'} • {new Date(post.created_at).toLocaleDateString()}
                   </p>
                   <p style={{
                     color: '#555',
@@ -243,7 +355,7 @@ export const BlogPage: React.FC = () => {
                     maxHeight: '100px',
                     overflow: 'hidden'
                   }}>
-                    {post.content.substring(0, 150)}...
+                    {getExcerpt(post.content, 150)}
                   </p>
                   <button
                     onClick={() => openPost(post)}
@@ -269,6 +381,7 @@ export const BlogPage: React.FC = () => {
               </motion.div>
             ))}
           </div>
+          </>
         )}
           </>
         )}

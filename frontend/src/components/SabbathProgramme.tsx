@@ -371,6 +371,54 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
   }, [programmes.length, selectedIndex]);
 
   const prog = programmes[selectedIndex];
+  const overviewStats = [
+    { label: 'Sabbath School', value: prog.sabbathSchool.time, color: '#0EA5E9' },
+    { label: 'Divine Service', value: prog.divineService.time, color: '#8B5CF6' },
+    { label: 'Afternoon', value: prog.afternoonProgramme.time, color: '#10B981' },
+    { label: 'Preacher', value: prog.sermon.preacher, color: 'var(--accent)' },
+  ];
+  const leadershipRows = [
+    { label: 'Song Leader', value: prog.sabbathSchool.songLeader },
+    { label: 'Opening Prayer', value: prog.sabbathSchool.openingPrayer },
+    { label: 'Superintendent', value: prog.sabbathSchool.superintendent },
+    { label: 'Assistant Superintendent', value: prog.sabbathSchool.assistantSuperintendent },
+    { label: 'Secretary', value: prog.sabbathSchool.secretary },
+    { label: 'Lesson Leader', value: prog.sabbathSchool.lessonLeader },
+  ];
+  const divineRows = [
+    { label: 'Song Leader', value: prog.divineService.songLeader },
+    { label: 'Organist', value: prog.divineService.organist },
+    { label: 'Worship Coordinator', value: prog.divineService.worshipCoordinator },
+    { label: 'Opening Prayer', value: prog.divineService.openingPrayer },
+    { label: 'Tithes & Offering', value: prog.divineService.tithesOffering },
+    { label: 'Announcements', value: prog.divineService.welcomeAndAnnouncements },
+  ];
+  const serviceTimeline = [
+    { time: '9:30 AM', item: 'Sabbath School Song Service', detail: `Led by ${prog.sabbathSchool.songLeader}`, color: '#0EA5E9' },
+    { time: '9:45 AM', item: 'Welcome and Opening Prayer', detail: `${prog.sabbathSchool.superintendent} · ${prog.sabbathSchool.openingPrayer}`, color: '#0EA5E9' },
+    { time: '10:00 AM', item: 'Lesson Study', detail: `Lesson ${prog.sabbathSchool.lessonNumber}: ${prog.sabbathSchool.lessonTitle}`, color: '#0EA5E9' },
+    { time: '10:40 AM', item: 'Mission and Offering', detail: prog.sabbathSchool.offeringDesignation, color: '#10B981' },
+    { time: '11:00 AM', item: 'Divine Service Begins', detail: `Opening hymn #${prog.hymns[0].number}`, color: '#8B5CF6' },
+    { time: '11:45 AM', item: 'Sermon', detail: `${prog.sermon.title} — ${prog.sermon.preacher}`, color: 'var(--accent)' },
+    { time: '12:50 PM', item: 'Benediction', detail: prog.benediction, color: '#8B5CF6' },
+    { time: '2:30 PM', item: 'Afternoon Programme', detail: `Led by ${prog.afternoonProgramme.leader}`, color: '#10B981' },
+  ];
+  const sabbathHymns = [
+    ...prog.sabbathSchool.openingSongs.map((song) => ({
+      number: song.number,
+      title: song.title,
+      moment: 'Opening Song Service',
+      book: 'Sabbath School',
+      color: '#0EA5E9',
+    })),
+    ...prog.hymns.map((hymn) => ({
+      number: hymn.number,
+      title: hymn.title,
+      moment: hymn.moment,
+      book: hymn.book,
+      color: momentColors[hymn.moment],
+    })),
+  ];
 
   return (
     <div>
@@ -433,12 +481,65 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
           </motion.div>
 
           <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.75rem' }}>
+            {overviewStats.map((item) => (
+              <motion.div
+                key={item.label}
+                variants={staggerItem}
+                className="card"
+                style={{ padding: '1rem 1.1rem', borderTop: `4px solid ${item.color}` }}>
+                <p style={{ margin: '0 0 0.35rem', fontSize: '0.72rem', fontWeight: '800', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94A3B8' }}>
+                  {item.label}
+                </p>
+                <p style={{ margin: 0, color: '#0f172a', fontSize: '0.98rem', fontWeight: '700', lineHeight: '1.4' }}>{item.value}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="card"
+            style={{ marginBottom: '1.5rem', borderTop: '4px solid var(--accent)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(212,175,55,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Music size={22} color="var(--accent)" />
+                </div>
+                <div>
+                  <h3 style={{ color: 'var(--primary)', margin: 0 }}>Hymns for This Sabbath</h3>
+                  <p style={{ margin: '0.2rem 0 0', color: '#94A3B8', fontSize: '0.82rem' }}>All opening and worship hymns for {prog.date}</p>
+                </div>
+              </div>
+              <span style={{ background: 'rgba(212,175,55,0.12)', color: 'var(--accent)', fontSize: '0.75rem', fontWeight: '800', padding: '0.35rem 0.7rem', borderRadius: '999px' }}>
+                {sabbathHymns.length} hymns
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+              {sabbathHymns.map((hymn, index) => (
+                <div key={`${hymn.number}-${hymn.moment}-${index}`} style={{ padding: '0.9rem 1rem', borderRadius: '14px', border: `1px solid ${hymn.color}22`, background: `${hymn.color}08` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', marginBottom: '0.45rem' }}>
+                    <span style={{ color: hymn.color, fontWeight: '800', fontSize: '0.82rem' }}>#{hymn.number}</span>
+                    <span style={{ fontSize: '0.68rem', fontWeight: '700', padding: '0.2rem 0.5rem', borderRadius: '999px', background: `${hymn.color}18`, color: hymn.color }}>{hymn.moment}</span>
+                  </div>
+                  <p style={{ margin: '0 0 0.25rem', color: '#0f172a', fontWeight: '700', fontSize: '0.92rem', lineHeight: '1.4' }}>{hymn.title}</p>
+                  <p style={{ margin: 0, color: '#64748B', fontSize: '0.78rem' }}>{hymn.book}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div
             key={prog.date + '-grid'}
             variants={staggerContainer} initial="hidden" animate="visible"
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
 
             {/* Sabbath School */}
-            <motion.div variants={staggerItem} className="card" style={{ borderTop: '4px solid #0EA5E9', gridColumn: '1 / -1' }}>
+            <motion.div variants={staggerItem} className="card" style={{ borderTop: '4px solid #0EA5E9' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
                 <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(14,165,233,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <BookOpen size={22} color="#0EA5E9" />
@@ -451,72 +552,39 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-
-                {/* Song Service */}
-                <div>
-                  <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0EA5E9', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>Opening Song Service</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                    {prog.sabbathSchool.openingSongs.map((s, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.55rem 0.85rem', background: 'rgba(14,165,233,0.05)', borderRadius: '10px' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0EA5E9', minWidth: '28px' }}>#{s.number}</span>
-                        <span style={{ fontSize: '0.88rem', color: '#333' }}>{s.title}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                    {[
-                      { label: 'Song Leader', value: prog.sabbathSchool.songLeader },
-                      { label: 'Opening Prayer', value: prog.sabbathSchool.openingPrayer },
-                      { label: 'Superintendent', value: prog.sabbathSchool.superintendent },
-                      { label: 'Asst. Superintendent', value: prog.sabbathSchool.assistantSuperintendent },
-                      { label: 'Secretary', value: prog.sabbathSchool.secretary },
-                      { label: 'Lesson Leader', value: prog.sabbathSchool.lessonLeader },
-                    ].map((r, i) => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', borderBottom: '1px solid #f5f5f5', paddingBottom: '0.35rem' }}>
-                        <span style={{ color: '#aaa', fontWeight: '700' }}>{r.label}</span>
-                        <span style={{ color: '#333', fontWeight: '500', textAlign: 'right' }}>{r.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Memory Verse + Lesson */}
-                <div>
-                  <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0EA5E9', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>This Week's Lesson</p>
-                  <div style={{ background: 'rgba(14,165,233,0.06)', borderRadius: '12px', padding: '1rem', borderLeft: '3px solid #0EA5E9', marginBottom: '1rem' }}>
-                    <p style={{ fontSize: '0.72rem', fontWeight: '700', color: '#0EA5E9', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>Memory Verse — {prog.sabbathSchool.memoryVerseRef}</p>
-                    <p style={{ color: 'var(--primary)', fontStyle: 'italic', fontSize: '0.9rem', lineHeight: '1.6', margin: 0 }}>{prog.sabbathSchool.memoryVerse}</p>
-                  </div>
-                  <p style={{ fontWeight: '700', color: '#1e293b', marginBottom: '0.75rem', fontSize: '0.95rem' }}>
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div style={{ background: 'rgba(14,165,233,0.06)', borderRadius: '14px', padding: '1rem 1.1rem', borderLeft: '4px solid #0EA5E9' }}>
+                  <p style={{ fontSize: '0.72rem', fontWeight: '800', color: '#0EA5E9', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>This Week's Lesson</p>
+                  <p style={{ margin: '0 0 0.45rem', color: '#0f172a', fontWeight: '700', fontSize: '1rem' }}>
                     Lesson {prog.sabbathSchool.lessonNumber}: "{prog.sabbathSchool.lessonTitle}"
                   </p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    {prog.sabbathSchool.dailyReadings.map((d, i) => (
-                      <div key={i} style={{ display: 'flex', gap: '0.75rem', alignItems: 'baseline', padding: '0.4rem 0', borderBottom: '1px solid #f5f5f5' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#bbb', minWidth: '62px' }}>{d.day}</span>
-                        <div>
-                          <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#333' }}>{d.title}</span>
-                          <span style={{ fontSize: '0.78rem', color: '#aaa', marginLeft: '0.5rem' }}>{d.text}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <p style={{ margin: 0, color: '#475569', fontSize: '0.84rem' }}>{prog.sabbathSchool.quarter}</p>
                 </div>
 
-                {/* Mission + Offering */}
-                <div>
-                  <div style={{ background: 'rgba(245,158,11,0.07)', borderRadius: '12px', padding: '0.9rem 1rem', marginBottom: '0.75rem', borderLeft: '3px solid #F59E0B' }}>
+                <div style={{ background: 'rgba(14,165,233,0.04)', borderRadius: '14px', padding: '1rem 1.1rem' }}>
+                  <p style={{ fontSize: '0.72rem', fontWeight: '800', color: '#0EA5E9', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>Memory Verse — {prog.sabbathSchool.memoryVerseRef}</p>
+                  <p style={{ color: 'var(--primary)', fontStyle: 'italic', fontSize: '0.93rem', lineHeight: '1.7', margin: 0 }}>{prog.sabbathSchool.memoryVerse}</p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                  {leadershipRows.map((row) => (
+                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'baseline', paddingBottom: '0.45rem', borderBottom: '1px solid #eef2f7', fontSize: '0.86rem' }}>
+                      <span style={{ color: '#94A3B8', fontWeight: '700' }}>{row.label}</span>
+                      <span style={{ color: '#1E293B', fontWeight: '600', textAlign: 'right' }}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  <div style={{ background: 'rgba(245,158,11,0.08)', borderRadius: '12px', padding: '0.9rem 1rem', borderLeft: '3px solid #F59E0B' }}>
                     <p style={{ fontSize: '0.72rem', fontWeight: '700', color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>Mission Spotlight</p>
-                    <p style={{ color: '#555', fontSize: '0.88rem', margin: 0 }}>{prog.sabbathSchool.missionSpotlight}</p>
+                    <p style={{ color: '#475569', fontSize: '0.88rem', margin: 0 }}>{prog.sabbathSchool.missionSpotlight}</p>
                   </div>
-
-                  <div style={{ background: 'rgba(16,185,129,0.07)', borderRadius: '12px', padding: '0.9rem 1rem', borderLeft: '3px solid #10B981' }}>
+                  <div style={{ background: 'rgba(16,185,129,0.08)', borderRadius: '12px', padding: '0.9rem 1rem', borderLeft: '3px solid #10B981' }}>
                     <p style={{ fontSize: '0.72rem', fontWeight: '700', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>Offering Designation</p>
-                    <p style={{ color: '#555', fontSize: '0.88rem', margin: 0 }}>{prog.sabbathSchool.offeringDesignation}</p>
+                    <p style={{ color: '#475569', fontSize: '0.88rem', margin: 0 }}>{prog.sabbathSchool.offeringDesignation}</p>
                   </div>
                 </div>
-
               </div>
             </motion.div>
 
@@ -534,13 +602,7 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {[
-                  { label: 'Song Leader', value: prog.divineService.songLeader },
-                  { label: 'Organist', value: prog.divineService.organist },
-                  { label: 'Opening Prayer', value: prog.divineService.openingPrayer },
-                  { label: 'Tithes & Offering', value: prog.divineService.tithesOffering },
-                  { label: 'Announcements', value: prog.divineService.welcomeAndAnnouncements }
-                ].map((item, i) => (
+                {divineRows.map((item, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', paddingBottom: '0.6rem', borderBottom: '1px solid #f5f5f5' }}>
                     <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>{item.label}</span>
                     <span style={{ fontSize: '0.88rem', color: '#333', textAlign: 'right', fontWeight: '500' }}>{item.value}</span>
@@ -579,17 +641,78 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
             </div>
           </motion.div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
-
-            {/* Hymns */}
-            <motion.div variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }}
-              className="card" style={{ borderTop: '4px solid #F59E0B' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Music size={22} color="#F59E0B" />
-                </div>
-                <h3 style={{ color: 'var(--primary)', margin: 0 }}>Worship Hymns</h3>
+          <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} className="card" style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(14,165,233,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Music size={22} color="#0EA5E9" />
               </div>
+              <div>
+                <h3 style={{ color: 'var(--primary)', margin: 0 }}>Opening Song Service</h3>
+                <p style={{ margin: 0, color: '#94A3B8', fontSize: '0.82rem' }}>Songs prepared for the Sabbath School opening</p>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+              {prog.sabbathSchool.openingSongs.map((song, index) => (
+                <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.85rem 0.95rem', borderRadius: '12px', background: 'rgba(14,165,233,0.05)', border: '1px solid rgba(14,165,233,0.12)' }}>
+                  <span style={{ minWidth: '42px', height: '42px', borderRadius: '10px', background: 'rgba(14,165,233,0.12)', color: '#0EA5E9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.82rem' }}>#{song.number}</span>
+                  <span style={{ color: '#1E293B', fontWeight: '600', fontSize: '0.9rem', lineHeight: '1.4' }}>{song.title}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+
+            <motion.details variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }} className="card" open style={{ borderTop: '4px solid #0EA5E9' }}>
+              <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <h3 style={{ color: 'var(--primary)', margin: 0 }}>Lesson Readings</h3>
+                  <p style={{ margin: '0.2rem 0 0', color: '#94A3B8', fontSize: '0.82rem' }}>Daily study guide for the week</p>
+                </div>
+                <span style={{ color: '#0EA5E9', fontSize: '0.8rem', fontWeight: '700' }}>{prog.sabbathSchool.dailyReadings.length} readings</span>
+              </summary>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                {prog.sabbathSchool.dailyReadings.map((reading, index) => (
+                  <div key={index} style={{ display: 'flex', gap: '0.8rem', alignItems: 'flex-start', padding: '0.65rem 0', borderBottom: '1px solid #eef2f7' }}>
+                    <span style={{ minWidth: '74px', color: '#94A3B8', fontSize: '0.74rem', fontWeight: '800', textTransform: 'uppercase' }}>{reading.day}</span>
+                    <div>
+                      <p style={{ margin: '0 0 0.15rem', color: '#0f172a', fontWeight: '700', fontSize: '0.9rem' }}>{reading.title}</p>
+                      <p style={{ margin: 0, color: '#64748B', fontSize: '0.82rem', lineHeight: '1.5' }}>{reading.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.details>
+
+            <motion.details variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }} className="card" style={{ borderTop: '4px solid #10B981' }}>
+              <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <h3 style={{ color: 'var(--primary)', margin: 0 }}>Classes and Teachers</h3>
+                  <p style={{ margin: '0.2rem 0 0', color: '#94A3B8', fontSize: '0.82rem' }}>Grouped by age and study room</p>
+                </div>
+                <span style={{ color: '#10B981', fontSize: '0.8rem', fontWeight: '700' }}>{prog.sabbathSchool.classes.length} classes</span>
+              </summary>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                {prog.sabbathSchool.classes.map((item, index) => (
+                  <div key={index} style={{ padding: '0.8rem 0.95rem', borderRadius: '12px', background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.1)' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                      <p style={{ margin: 0, color: '#0f172a', fontWeight: '700', fontSize: '0.9rem' }}>{item.name}</p>
+                      <span style={{ color: '#10B981', fontWeight: '700', fontSize: '0.78rem' }}>{item.ageRange}</span>
+                    </div>
+                    <p style={{ margin: '0.35rem 0 0', color: '#64748B', fontSize: '0.83rem' }}>{item.teacher} · {item.room}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.details>
+
+            <motion.details variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }} className="card" style={{ borderTop: '4px solid #F59E0B' }}>
+              <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <h3 style={{ color: 'var(--primary)', margin: 0 }}>Worship Hymns</h3>
+                  <p style={{ margin: '0.2rem 0 0', color: '#94A3B8', fontSize: '0.82rem' }}>Key congregational hymns for the day</p>
+                </div>
+                <span style={{ color: '#F59E0B', fontSize: '0.8rem', fontWeight: '700' }}>{prog.hymns.length} hymns</span>
+              </summary>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {prog.hymns.map((hymn, i) => (
                   <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'center', padding: '0.75rem', borderRadius: '12px', background: '#fafafa', border: '1px solid #f0f0f0' }}>
@@ -612,16 +735,25 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </motion.details>
 
             {/* Special Items */}
-            <motion.div variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }}
+            <motion.details variants={staggerItem} initial="hidden" whileInView="visible" viewport={{ once: true }}
               className="card" style={{ borderTop: '4px solid #EC4899' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(236,72,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Star size={22} color="#EC4899" />
+              <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(236,72,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Star size={22} color="#EC4899" />
+                  </div>
+                  <div>
+                    <h3 style={{ color: 'var(--primary)', margin: 0 }}>Special Items</h3>
+                    <p style={{ margin: '0.2rem 0 0', color: '#94A3B8', fontSize: '0.82rem' }}>Choirs, youth items, and closing moments</p>
+                  </div>
                 </div>
-                <h3 style={{ color: 'var(--primary)', margin: 0 }}>Special Items</h3>
+                <span style={{ color: '#EC4899', fontSize: '0.8rem', fontWeight: '700' }}>{prog.specialItems.length} items</span>
+              </summary>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'none' }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {prog.specialItems.map((item, i) => (
@@ -652,18 +784,23 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
                   ))}
                 </div>
               </div>
-            </motion.div>
+            </motion.details>
           </div>
 
           {/* Afternoon Programme */}
-          <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} style={{ marginBottom: '1.5rem' }}>
+          <motion.details variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} open className="card" style={{ marginBottom: '1.5rem', paddingTop: '1.5rem' }}>
+            <summary style={{ cursor: 'pointer', listStyle: 'none', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, transparent, #e5e7eb)' }} />
+                <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.12em', whiteSpace: 'nowrap' }}>Afternoon Programme</span>
+                <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, #e5e7eb, transparent)' }} />
+              </div>
+            </summary>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingTop: '0.5rem' }}>
-              <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, transparent, #e5e7eb)' }} />
-              <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.12em', whiteSpace: 'nowrap' }}>Afternoon Programme</span>
-              <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, #e5e7eb, transparent)' }} />
+              <p style={{ margin: 0, color: '#64748B', fontSize: '0.9rem' }}>Prayer focus and group discussion for the afternoon session.</p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
 
               {/* Hour of Prayer */}
               <motion.div variants={staggerItem} className="card" style={{ borderTop: '4px solid #8B5CF6' }}>
@@ -730,41 +867,25 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
                 </div>
               </motion.div>
             </div>
-          </motion.div>
+          </motion.details>
 
           {/* Order of Service Timeline */}
-          <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} className="card"
+          <motion.details variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} className="card"
+            open
             style={{ background: 'linear-gradient(135deg, rgba(30,58,138,0.03), rgba(212,175,55,0.05))', marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(30,58,138,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Clock size={22} color="var(--primary)" />
+            <summary style={{ cursor: 'pointer', listStyle: 'none', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(30,58,138,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Clock size={22} color="var(--primary)" />
+                </div>
+                <div>
+                  <h3 style={{ color: 'var(--primary)', margin: 0 }}>Order of Service</h3>
+                  <p style={{ margin: '0.2rem 0 0', color: '#94A3B8', fontSize: '0.82rem' }}>Quick running order for the whole day</p>
+                </div>
               </div>
-              <h3 style={{ color: 'var(--primary)', margin: 0 }}>Order of Service</h3>
-            </div>
+            </summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-              {[
-                { time: '9:30 AM', item: 'Sabbath School — Song Service', detail: `Led by ${prog.sabbathSchool.songLeader}`, color: '#0EA5E9' },
-                { time: '9:45 AM', item: 'Opening Prayer & Superintendent\'s Welcome', detail: prog.sabbathSchool.superintendent, color: '#0EA5E9' },
-                { time: '9:50 AM', item: 'Memory Verse Recitation', detail: prog.sabbathSchool.memoryVerseRef, color: '#0EA5E9' },
-                { time: '9:55 AM', item: 'Mission Spotlight', detail: prog.sabbathSchool.missionSpotlight, color: '#F59E0B' },
-                { time: '10:00 AM', item: 'Class Lesson Study', detail: `Lesson ${prog.sabbathSchool.lessonNumber}: "${prog.sabbathSchool.lessonTitle}"`, color: '#0EA5E9' },
-                { time: '10:40 AM', item: 'Sabbath School Offering', detail: prog.sabbathSchool.offeringDesignation, color: '#10B981' },
-                { time: '10:50 AM', item: 'Combined Review & Closing Prayer', detail: `Led by ${prog.sabbathSchool.superintendent}`, color: '#0EA5E9' },
-                { time: '11:00 AM', item: 'Divine Service — Opening Hymn', detail: `#${prog.hymns[0].number} "${prog.hymns[0].title}"`, color: '#8B5CF6' },
-                { time: '11:10 AM', item: 'Opening Prayer', detail: prog.divineService.openingPrayer, color: '#8B5CF6' },
-                { time: '11:15 AM', item: 'Hymn of Praise', detail: `#${prog.hymns[1].number} "${prog.hymns[1].title}"`, color: '#8B5CF6' },
-                { time: '11:20 AM', item: 'Tithes & Offering', detail: prog.divineService.tithesOffering, color: '#10B981' },
-                { time: '11:30 AM', item: prog.specialItems[0].type, detail: `"${prog.specialItems[0].song}" — ${prog.specialItems[0].group}`, color: '#EC4899' },
-                { time: '11:40 AM', item: 'Pre-Sermon Hymn', detail: `#${prog.hymns[2].number} "${prog.hymns[2].title}"`, color: '#F59E0B' },
-                { time: '11:45 AM', item: 'Sermon', detail: `"${prog.sermon.title}" — ${prog.sermon.preacher}`, color: 'var(--accent)' },
-                { time: '12:30 PM', item: prog.specialItems[1]?.type || 'Closing Special', detail: prog.specialItems[1] ? `"${prog.specialItems[1].song}" — ${prog.specialItems[1].group}` : '', color: '#EC4899' },
-                { time: '12:40 PM', item: 'Closing Hymn', detail: `#${prog.hymns[3].number} "${prog.hymns[3].title}"`, color: '#10B981' },
-                { time: '12:50 PM', item: 'Closing Prayer & Benediction', detail: prog.benediction, color: 'var(--primary)' },
-                { time: '2:30 PM', item: 'Afternoon Programme Opens', detail: `Led by ${prog.afternoonProgramme.leader}`, color: '#8B5CF6' },
-                { time: '2:35 PM', item: 'Hour of Prayer', detail: `Focus: ${prog.afternoonProgramme.prayerFocus}`, color: '#8B5CF6' },
-                { time: '3:30 PM', item: 'Topic of Discussion', detail: `"${prog.afternoonProgramme.discussionTopic}" — ${prog.afternoonProgramme.discussionLeader}`, color: '#10B981' },
-                { time: '4:30 PM', item: 'Afternoon Dismissal', detail: 'Closing song & prayer', color: '#10B981' }
-              ].map((row, i, arr) => (
+              {serviceTimeline.map((row, i, arr) => (
                 <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', position: 'relative' }}>
                   {/* Timeline line */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
@@ -781,7 +902,7 @@ export const SabbathProgramme: React.FC<SabbathProgrammeProps> = ({ programmesDa
                 </div>
               ))}
             </div>
-          </motion.div>
+          </motion.details>
 
           {/* Notice */}
           <motion.div className="dark-card" variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}>
