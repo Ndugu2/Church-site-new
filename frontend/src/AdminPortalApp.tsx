@@ -4236,7 +4236,14 @@ export default function AdminPortalApp() {
         triggerLog(`Admin logged in: ${data?.username || adminLoginForm.username}`);
         toast.success('Welcome back, Administrator!');
       } else {
-        setAdminLoginError(data?.error || 'Invalid username or password. Please try again.');
+        const responseError = typeof data?.error === 'string'
+          ? data.error
+          : data?.error?.message;
+        if (res.status === 401 && typeof responseError === 'string' && responseError.toLowerCase().includes('protected deployment')) {
+          setAdminLoginError('This Vercel deployment is protected. Sign in to Vercel or disable Deployment Protection for this environment.');
+        } else {
+          setAdminLoginError(responseError || 'Invalid username or password. Please try again.');
+        }
       }
     } catch {
       setAdminLoginError('Cannot connect to server. Please check backend API connection.');
