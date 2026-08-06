@@ -3,11 +3,17 @@
   "rewrites": [
     {
       "source": "/portal",
-      "destination": "/admin.html"
+      "destination": {
+        "service": "frontend",
+        "path": "/admin.html"
+      }
     },
     {
       "source": "/portal/(.*)",
-      "destination": "/admin.html"
+      "destination": {
+        "service": "frontend",
+        "path": "/admin.html"
+      }
     },
     {
       "source": "/api/(.*)",
